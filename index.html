@@ -533,10 +533,24 @@ function initApp(){
   loadProfile();
   // Build tabs
   buildTabs();
+  // Deep link: if the chat button/LIFF URL included ?type=po (etc.), jump straight to that tab
+  const requestedType=getRequestedDocType_();
+  if(requestedType) switchType(requestedType);
   // Init form
   initDates();
   addRow();
   updatePreview();
+}
+
+// Reads ?type=xxx from the URL LIFF was opened with, so a chat menu button
+// can deep-link straight into the matching document tab (no double selection).
+function getRequestedDocType_(){
+  try{
+    const params=new URLSearchParams(location.search);
+    const id=params.get('type');
+    if(!id) return null;
+    return DOC_TYPES.find(function(dt){return dt.id===id;}) || null;
+  }catch(e){ return null; }
 }
 
 function logout(){
