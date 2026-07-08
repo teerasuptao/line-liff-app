@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>CHUAY — ระบบสร้างเอกสาร</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:15px;scroll-behavior:smooth}
@@ -30,9 +31,9 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 .login-sub{font-size:13px;color:var(--muted);margin-bottom:28px}
 .login-divider{border:0;border-top:1px solid var(--border);margin:20px 0}
 .login-note{font-size:11px;color:var(--muted);line-height:1.6}
-.google-btn{width:100%;border:1.5px solid var(--ink);border-radius:var(--r-sm);padding:12px 20px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;background:#fff;box-shadow:var(--shadow-sm);transition:var(--t);display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px}
-.google-btn:hover{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
-.google-icon{width:20px;height:20px}
+.line-btn{width:100%;border:1.5px solid var(--ink);border-radius:var(--r-sm);padding:12px 20px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;background:#06C755;color:#fff;box-shadow:var(--shadow-sm);transition:var(--t);display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px}
+.line-btn:hover{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.line-icon{width:20px;height:20px;border-radius:5px;background:#fff;color:#06C755;display:grid;place-items:center;font-size:12px;font-weight:900}
 
 /* ── App (hidden until auth) ── */
 #appScreen{display:none}
@@ -212,19 +213,19 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
     <div style="font-size:22px;font-weight:900;margin-bottom:4px">ยินดีต้อนรับ</div>
     <div class="login-sub">ระบบสร้างเอกสารธุรกิจ · ใบเสนอราคา Invoice PO และอื่นๆ</div>
     <div style="background:#FAFBF7;border:1.5px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:16px;text-align:left">
-      <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">เข้าสู่ระบบด้วย Google</div>
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">เข้าสู่ระบบด้วย LINE</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.7">
-        ✅ ไม่ต้องสมัครสมาชิก<br>
+        ✅ เปิดจาก LINE OA หรือ LIFF URL ได้ทันที<br>
         ✅ ข้อมูลบริษัทบันทึกอัตโนมัติ<br>
         ✅ ดูประวัติเอกสารย้อนหลัง
       </div>
     </div>
     <div id="loginMsg" style="font-size:13px;color:#e53e3e;min-height:20px;margin-bottom:8px"></div>
-    <button class="google-btn" onclick="checkAuth()">
-      <svg class="google-icon" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-      Sign in with Google
+    <button class="line-btn" onclick="checkAuth()">
+      <span class="line-icon">L</span>
+      เข้าสู่ระบบด้วย LINE
     </button>
-    <div class="login-note">ระบบนี้ใช้ Google Account เพื่อความปลอดภัยและบันทึกข้อมูลของคุณ</div>
+    <div class="login-note">ระบบนี้ใช้ LINE Login ผ่าน LIFF เพื่อยืนยันตัวตนและบันทึกข้อมูลของคุณ</div>
   </div>
 </div>
 
@@ -435,6 +436,24 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 
 <script>
 // ── Config ────────────────────────────────────────────────────
+const LIFF_ID='2010618788-8xUdkoqR';
+// TODO: paste your Apps Script Web App /exec URL here (Deploy > Manage deployments)
+const GAS_URL='https://script.google.com/macros/s/AKfycbxBbsLZWyKmbRfY_4FMWLjkkfPtFjxWmtK8pg6VRv4SqUztp5fGaR1vcDdqZeLNz6VM/exec';
+
+// Calls the Apps Script backend as a plain HTTP API instead of google.script.run
+// (google.script.run only works when the page itself is served by Apps Script).
+// Uses text/plain content-type to avoid a CORS preflight (OPTIONS) request,
+// which Apps Script Web Apps do not handle.
+function callServer(action,payload){
+  return fetch(GAS_URL,{
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:action,payload:payload||{}})
+  }).then(function(res){
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    return res.json();
+  });
+}
 const DOC_TYPES=[
   {id:'quotation',name:'ใบเสนอราคา',    badge:'QT', color:'#C9EF3E',prefix:'QT', extraLabel:'วันหมดอายุ',           extraKey:'expireDate',  receiverTitle:'ข้อมูลลูกค้า',        receiverLabel:'ชื่อลูกค้า / บริษัท',isPO:false,showPayment:false},
   {id:'invoice',  name:'ใบแจ้งหนี้',    badge:'INV',color:'#A8E6CF',prefix:'INV',extraLabel:'วันครบกำหนดชำระ',      extraKey:'dueDate',     receiverTitle:'ข้อมูลลูกค้า',        receiverLabel:'ชื่อลูกค้า / บริษัท',isPO:false,showPayment:false},
@@ -448,26 +467,54 @@ let currentType=DOC_TYPES[0];
 let rowCount=0;
 let currentUser=null;
 let companyProfile=null;
+let currentLineAuth=null;
 
 // ── Auth ──────────────────────────────────────────────────────
-function checkAuth(){
+async function checkAuth(){
   document.getElementById('loginMsg').textContent='';
-  showOverlay(true,'กำลังตรวจสอบสิทธิ์','กรุณารอสักครู่');
-  google.script.run
-    .withSuccessHandler(function(user){
+  showOverlay(true,'กำลังเข้าสู่ระบบ LINE','กรุณารอสักครู่');
+  try{
+    if(!window.liff) throw new Error('โหลด LIFF SDK ไม่สำเร็จ');
+    await liff.init({liffId:LIFF_ID});
+    if(!liff.isLoggedIn()){
+      liff.login({redirectUri:location.href});
+      return;
+    }
+    const profile=await liff.getProfile();
+    const idToken=liff.getIDToken();
+    if(!idToken) throw new Error('ไม่พบ LINE ID token กรุณาตรวจสอบ scope openid ใน LIFF');
+    currentLineAuth={
+      idToken:idToken,
+      lineUserId:profile.userId,
+      displayName:profile.displayName,
+      pictureUrl:profile.pictureUrl || ''
+    };
+  }catch(e){
+    showOverlay(false);
+    document.getElementById('loadingScreen').style.display='none';
+    document.getElementById('loginScreen').style.display='flex';
+    document.getElementById('loginMsg').textContent='เข้าสู่ระบบ LINE ไม่สำเร็จ: '+(e.message||e);
+    return;
+  }
+
+  callServer('getCurrentUser',{lineAuth:currentLineAuth})
+    .then(function(user){
       showOverlay(false);
+      document.getElementById('loadingScreen').style.display='none';
       if(user.loggedIn){
         currentUser=user;
         initApp();
       } else {
-        document.getElementById('loginMsg').textContent='กรุณาเปิดลิงก์นี้ด้วย Google Account ของคุณ';
+        document.getElementById('loginScreen').style.display='flex';
+        document.getElementById('loginMsg').textContent=user.error||'กรุณาเข้าสู่ระบบผ่าน LINE LIFF';
       }
     })
-    .withFailureHandler(function(e){
+    .catch(function(e){
       showOverlay(false);
+      document.getElementById('loadingScreen').style.display='none';
+      document.getElementById('loginScreen').style.display='flex';
       document.getElementById('loginMsg').textContent='เกิดข้อผิดพลาด: '+e.message;
-    })
-    .getCurrentUser();
+    });
 }
 
 function initApp(){
@@ -476,7 +523,7 @@ function initApp(){
   document.getElementById('appScreen').style.display='block';
   // Update user UI
   const initial=(currentUser.name||'U')[0].toUpperCase();
-  const email=currentUser.email||'';
+  const email=currentUser.displayName||currentUser.name||currentUser.lineUserId||'LINE User';
   document.getElementById('topAvatar').textContent=initial;
   document.getElementById('topEmail').textContent=email;
   document.getElementById('drawerAvatar').textContent=initial;
@@ -486,22 +533,37 @@ function initApp(){
   loadProfile();
   // Build tabs
   buildTabs();
+  // Deep link: if the chat button/LIFF URL included ?type=po (etc.), jump straight to that tab
+  const requestedType=getRequestedDocType_();
+  if(requestedType) switchType(requestedType);
   // Init form
   initDates();
   addRow();
   updatePreview();
 }
 
+// Reads ?type=xxx from the URL LIFF was opened with, so a chat menu button
+// can deep-link straight into the matching document tab (no double selection).
+function getRequestedDocType_(){
+  try{
+    const params=new URLSearchParams(location.search);
+    const id=params.get('type');
+    if(!id) return null;
+    return DOC_TYPES.find(function(dt){return dt.id===id;}) || null;
+  }catch(e){ return null; }
+}
+
 function logout(){
   if(confirm('ออกจากระบบ?')){
+    if(window.liff&&liff.isLoggedIn()) liff.logout();
     location.reload();
   }
 }
 
 // ── Profile ───────────────────────────────────────────────────
 function loadProfile(){
-  google.script.run
-    .withSuccessHandler(function(profile){
+  callServer('getCompanyProfile',{lineAuth:currentLineAuth})
+    .then(function(profile){
       if(profile){
         companyProfile=profile;
         fillFromProfile();
@@ -514,8 +576,7 @@ function loadProfile(){
         setV('p_companyEmail',  profile.companyEmail);
       }
     })
-    .withFailureHandler(function(){})
-    .getCompanyProfile();
+    .catch(function(){});
 }
 
 function fillFromProfile(){
@@ -542,8 +603,8 @@ function saveProfile(){
   };
   if(!profile.companyName){showToast('⚠️ กรุณากรอกชื่อบริษัท');return;}
   document.getElementById('saveStatus').textContent='กำลังบันทึก...';
-  google.script.run
-    .withSuccessHandler(function(res){
+  callServer('saveCompanyProfile',{profile:profile,lineAuth:currentLineAuth})
+    .then(function(res){
       if(res.success){
         companyProfile=profile;
         document.getElementById('saveStatus').textContent='✅ '+res.message;
@@ -553,33 +614,31 @@ function saveProfile(){
         document.getElementById('saveStatus').textContent='❌ '+res.error;
       }
     })
-    .withFailureHandler(function(e){
+    .catch(function(e){
       document.getElementById('saveStatus').textContent='❌ เกิดข้อผิดพลาด';
-    })
-    .saveCompanyProfile(profile);
+    });
 }
 
 // ── History ───────────────────────────────────────────────────
 function loadHistory(){
-  google.script.run
-    .withSuccessHandler(function(items){
+  callServer('getDocHistory',{docType:currentType.name,lineAuth:currentLineAuth})
+    .then(function(items){
       const el=document.getElementById('historyList');
       if(!items||items.length===0){
         el.innerHTML='<div style="font-size:12px;color:var(--muted);text-align:center;padding:12px">ยังไม่มีเอกสาร</div>';
         return;
       }
       el.innerHTML=items.map(function(item){
-        return '<div class="history-item" onclick="window.open(\''+item.url+'\',\'_blank\')">'
+        return '<div class="history-item" onclick="window.open(\''+escapeAttr(item.url)+'\',\'_blank\')">'
           +'<div style="display:flex;justify-content:space-between;align-items:center">'
-          +'<div class="history-no">'+item.docNo+'</div>'
+          +'<div class="history-no">'+escapeHtml(item.docNo)+'</div>'
           +'<div class="history-total">฿'+parseFloat(item.total||0).toLocaleString('th-TH')+'</div>'
           +'</div>'
-          +'<div class="history-meta">'+item.customer+' · '+item.docDate+'</div>'
+          +'<div class="history-meta">'+escapeHtml(item.customer)+' · '+escapeHtml(item.docDate)+'</div>'
           +'</div>';
       }).join('');
     })
-    .withFailureHandler(function(){})
-    .getDocHistory(currentType.name);
+    .catch(function(){});
 }
 
 // ── Profile drawer ────────────────────────────────────────────
@@ -638,7 +697,7 @@ function addRow(name,qty,price,disc){
   row.className='item-row';
   row.id='row-'+id;
   row.innerHTML=
-    '<input type="text" class="iname" placeholder="ชื่อสินค้า / บริการ" value="'+(name||'')+'" oninput="calcRender()"/>'
+    '<input type="text" class="iname" placeholder="ชื่อสินค้า / บริการ" value="'+escapeAttr(name||'')+'" oninput="calcRender()"/>'
     +'<input type="number" class="iqty num" value="'+(qty||1)+'" min="0" step="any" oninput="calcRender()"/>'
     +'<input type="number" class="iprice num" value="'+(price||'')+'" min="0" step="any" placeholder="0.00" oninput="calcRender()"/>'
     +'<input type="number" class="idisc num" value="'+(disc||'')+'" min="0" step="any" placeholder="0" oninput="calcRender()"/>'
@@ -701,7 +760,7 @@ function updatePreview(){
   } else {
     pvEl.innerHTML=items.slice(0,4).map(function(i){
       const lt=(i.qty*i.price)-i.discount;
-      return '<div class="prev-tr"><span>'+i.name+'</span><span style="text-align:right">'+lt.toLocaleString('th-TH',{minimumFractionDigits:2})+'</span></div>';
+      return '<div class="prev-tr"><span>'+escapeHtml(i.name)+'</span><span style="text-align:right">'+lt.toLocaleString('th-TH',{minimumFractionDigits:2})+'</span></div>';
     }).join('')+(items.length>4?'<div class="prev-tr" style="color:#aaa;font-size:10px"><span>+ อีก '+(items.length-4)+' รายการ</span><span></span></div>':'');
   }
 }
@@ -754,8 +813,8 @@ function generate(){
   if(err){showToast('⚠️ '+err);return;}
   showOverlay(true,'กำลังสร้างเอกสาร','กรุณารอสักครู่ (5–20 วินาที)');
   document.getElementById('btnGen').disabled=true;
-  google.script.run
-    .withSuccessHandler(function(res){
+  callServer('generatePDF',{formData:data,lineAuth:currentLineAuth})
+    .then(function(res){
       showOverlay(false);
       document.getElementById('btnGen').disabled=false;
       if(res.success){
@@ -767,12 +826,11 @@ function generate(){
         showToast('❌ '+res.error);
       }
     })
-    .withFailureHandler(function(e){
+    .catch(function(e){
       showOverlay(false);
       document.getElementById('btnGen').disabled=false;
       showToast('❌ '+(e.message||e));
-    })
-    .generatePDF(data);
+    });
 }
 
 function newDoc(){
@@ -794,6 +852,12 @@ function newDoc(){
 // ── Helpers ───────────────────────────────────────────────────
 function gv(id){const el=document.getElementById(id);return el?el.value.trim():'';}
 function setV(id,val){const el=document.getElementById(id);if(el&&val)el.value=val;}
+function escapeHtml(value){
+  return String(value==null?'':value).replace(/[&<>"']/g,function(ch){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+  });
+}
+function escapeAttr(value){return escapeHtml(value).replace(/`/g,'&#96;');}
 function showOverlay(show,title,sub){
   document.getElementById('overlay').classList.toggle('show',show);
   if(title) document.getElementById('overlayTitle').textContent=title;
@@ -818,24 +882,7 @@ function initDates(){
 
 // ── Init ──────────────────────────────────────────────────────
 window.onload=function(){
-  showOverlay(true,'กำลังตรวจสอบการเข้าสู่ระบบ','');
-  google.script.run
-    .withSuccessHandler(function(user){
-      showOverlay(false);
-      document.getElementById('loadingScreen').style.display='none';
-      if(user.loggedIn){
-        currentUser=user;
-        initApp();
-      } else {
-        document.getElementById('loginScreen').style.display='flex';
-      }
-    })
-    .withFailureHandler(function(){
-      showOverlay(false);
-      document.getElementById('loadingScreen').style.display='none';
-      document.getElementById('loginScreen').style.display='flex';
-    })
-    .getCurrentUser();
+  checkAuth();
 };
 
 document.addEventListener('input',function(e){
