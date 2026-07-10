@@ -187,6 +187,18 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 22px;border-radius:999px;font-size:13px;font-weight:600;z-index:300;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
 .toast.show{opacity:1}
 
+/* Upgrade / subscribe popup — shown when the free trial (or a paid
+   package's monthly quota) runs out. Reuses the neo-brutalist card style
+   used everywhere else (thick border + offset shadow). */
+.upgrade-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;place-items:center;backdrop-filter:blur(6px)}
+.upgrade-overlay.show{display:grid}
+.upgrade-box{background:#fff;border:2px solid var(--ink);border-radius:16px;padding:32px 28px;text-align:center;box-shadow:6px 6px 0 var(--ink);max-width:340px;width:90%}
+.upgrade-icon{font-size:40px;margin-bottom:10px}
+.upgrade-title{font-size:18px;font-weight:900;margin-bottom:8px}
+.upgrade-msg{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px}
+.upgrade-actions{display:flex;flex-direction:column;gap:8px}
+.upgrade-close{margin-top:12px;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline}
+
 @media(max-width:600px){
   .grid2{grid-template-columns:1fr}.col2{grid-column:1}
   .topbar,.doc-selector,.main{padding-left:14px;padding-right:14px}
@@ -240,6 +252,20 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+
+<!-- Upgrade / Subscribe popup — shown when free-trial or paid quota runs out -->
+<div class="upgrade-overlay" id="upgradeOverlay">
+  <div class="upgrade-box">
+    <div class="upgrade-icon">🔒</div>
+    <div class="upgrade-title">ใช้งานครบโควตาแล้ว</div>
+    <div class="upgrade-msg" id="upgradeMsg">คุณใช้งานฟรีครบ 50 ครั้งแล้ว กรุณาสมัครแพ็กเกจเพื่อใช้งานต่อ</div>
+    <div class="upgrade-actions">
+      <button class="btn btn-primary" onclick="contactAdminForUpgrade()">💬 ทักแอดมินเพื่อสมัครแพ็กเกจ</button>
+      <button class="btn btn-accent" onclick="closeUpgradeModal()">ดูภายหลัง</button>
+    </div>
+    <button class="upgrade-close" onclick="closeUpgradeModal()">ปิด</button>
+  </div>
+</div>
 
 <!-- Profile Drawer -->
 <div class="profile-panel" id="profilePanel" onclick="handlePanelClick(event)">
@@ -534,7 +560,7 @@ function renderPlanBadge(){
   const quotaText = (pkg.quotaPerMonth === null || pkg.quotaPerMonth === undefined)
     ? 'ไม่จำกัด'
     : (pkg.usageCount + '/' + pkg.quotaPerMonth + ' ครั้ง');
-  el.textContent = '📦 ' + pkg.name + ' · ' + quotaText;
+  el.textContent = (pkg.isTrial ? '🆓 ' : '📦 ') + pkg.name + ' · ' + quotaText;
   el.style.display = 'inline-block';
 }
 
@@ -892,6 +918,13 @@ function generate(){
           docNo: data.docNo,
           customerName: data.customerName || data.vendorName || ''
         };
+        // Keep the "used X/Y" badge in sync after consuming a credit.
+        if(currentUser && currentUser.package && res.remainingQuota!==null && res.remainingQuota!==undefined){
+          currentUser.package.usageCount = currentUser.package.quotaPerMonth - res.remainingQuota;
+          renderPlanBadge();
+        }
+      } else if(res.upgradeRequired){
+        showUpgradeModal(res.error);
       } else {
         showToast('❌ '+res.error);
       }
@@ -963,6 +996,25 @@ function showToast(msg){
   el.textContent=msg;el.classList.add('show');
   clearTimeout(toastT);
   toastT=setTimeout(function(){el.classList.remove('show');},4000);
+}
+// Shown when generatePDF returns upgradeRequired:true — either the free
+// trial's 50 uses ran out, or a paid package's monthly quota ran out.
+function showUpgradeModal(msg){
+  document.getElementById('upgradeMsg').textContent = msg || 'ใช้งานครบโควตาแล้ว กรุณาสมัคร/อัปเกรดแพ็กเกจเพื่อใช้งานต่อ';
+  document.getElementById('upgradeOverlay').classList.add('show');
+}
+function closeUpgradeModal(){
+  document.getElementById('upgradeOverlay').classList.remove('show');
+}
+// Sends the user back to the LINE chat (where the bot can take "แพ็กเกจ"
+// / admin contact from there) if we're inside the LIFF client; otherwise
+// just points them at the chat via a toast.
+function contactAdminForUpgrade(){
+  closeUpgradeModal();
+  if(typeof liff!=='undefined' && liff.isInClient && liff.isInClient()){
+    try{ liff.closeWindow(); return; }catch(e){}
+  }
+  showToast('พิมพ์ "แพ็กเกจ" ในแชท LINE เพื่อดูรายละเอียดและสมัครได้เลยค่ะ 💕');
 }
 function initDates(){
   const today=new Date();
