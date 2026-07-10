@@ -896,8 +896,8 @@ function buildPackageInfoMessage_() {
     '• สร้างเอกสารได้ไม่จำกัด\n\n' +
     '3️⃣ แพ็ค 990 บาท/เดือน\n' +
     '• สร้างเอกสารได้ไม่จำกัด\n' +
-    '• ใช้ AI ผู้ช่วยตอบคำถามได้\n' +
     '• ระบบทำบัญชี/ยื่นภาษีรายเดือน (เร็วๆ นี้)\n\n' +
+    '(น้องแชทตอบคำถามได้ฟรีทุกแพ็กเลยค่ะ 💕)\n\n' +
     'สนใจสมัคร/อัปเกรดแพ็กเกจ ทักแอดมินได้เลยนะคะ 🙏💕';
 }
 
@@ -906,12 +906,25 @@ function buildTaxFeatureMessage_(lineUserId) {
   if (sub && sub.pkg.hasTax) {
     return '🧾 ระบบทำบัญชี/ยื่นภาษีรายเดือน กำลังพัฒนาอยู่ค่ะ จะเปิดให้ใช้งานเร็วๆ นี้นะคะ (ท่านมีสิทธิ์ใช้งานฟีเจอร์นี้อยู่แล้วในแพ็ก ' + sub.pkg.name + ')';
   }
+  return '🧾 ฟีเจอร์ระบบบัญชี/ยื่นภาษี อยู่ในแพ็ก 990 บาท/เดือนเท่านั้นนะคะ พิมพ์ "แพ็กเกจ" เพื่อดูรายละเอียดและอัปเกรดได้เลยค่ะ';
+}
+
+// Only package 990 (hasAI) gets real AI answers; everyone else gets an upsell.
+// AI FAQ assistant answers everyone immediately — first point of contact
+// for any message that isn't a keyword shortcut (e.g. a customer just
+// saying "สวัสดี" gets a real, immediate reply, not a paywall message).
+// Not gated by package: this is basic customer service, not a premium perk.
+function handleAiOrUpsell_(text, lineUserId) {
+  return askGemini_(text);
+}
+
 // Restricted-scope FAQ system prompt — only answers questions about this
 // business / how to use the CHUAY document app. Anything else gets a
 // polite redirect instead of a free-ranging AI conversation.
 const BOT_SYSTEM_PROMPT_ =
   'คุณคือผู้ช่วยตอบคำถามของ "ง่าย ผู้ช่วยทำเอกสาร" เป็นผู้หญิงตอบแบบน่ารักเป็นกันเอง ซึ่งเป็นแอปสร้างเอกสารธุรกิจผ่าน LINE ' +
   '(ใบเสนอราคา, ใบสั่งซื้อ PO, ใบแจ้งหนี้ Invoice, ใบเสร็จรับเงิน, ใบส่งของ, ใบวางบิล) ' +
+  'คุณคือด่านแรกที่ลูกค้าทักมาคุยด้วย — ถ้าลูกค้าทักทายเฉยๆ เช่น "สวัสดี", "หวัดดี", "Hello" ให้ทักทายกลับอย่างอบอุ่นเป็นกันเอง แนะนำตัวสั้นๆ ว่าช่วยอะไรได้บ้าง แล้วถามว่าวันนี้อยากให้ช่วยเรื่องอะไร ' +
   'ตอบเฉพาะคำถามเกี่ยวกับวิธีใช้งานแอปนี้ ฟีเจอร์ต่างๆ และบริการของบริษัทเท่านั้น ' +
   'ตอบสั้น กระชับ เป็นกันเอง เป็นภาษาไทย ไม่เกิน 3-4 ประโยค ' +
   'ถ้าคำถามอยู่นอกขอบเขตนี้โดยสิ้นเชิง (เช่น เรื่องทั่วไปที่ไม่เกี่ยวกับแอปหรือบริการเลย) ' +
