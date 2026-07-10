@@ -233,7 +233,7 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
       </div>
     </div>
     <div id="loginMsg" style="font-size:13px;color:#e53e3e;min-height:20px;margin-bottom:8px"></div>
-    <button class="line-btn" onclick="checkAuth()">
+    <button class="line-btn" onclick="forceRelogin()">
       <span class="line-icon">L</span>
       เข้าสู่ระบบด้วย LINE
     </button>
@@ -499,6 +499,23 @@ let companyProfile=null;
 let currentLineAuth=null;
 
 // ── Auth ──────────────────────────────────────────────────────
+// LIFF caches the login session (incl. the ID token) in the browser. That
+// token is a JWT with its own expiry — if the person left the tab open a
+// while, or comes back later, liff.isLoggedIn() can still say "yes" even
+// though the cached ID token itself has expired. LINE's verify endpoint
+// then rejects it with "IdToken expired" and, without special handling,
+// the person is stuck: clicking "เข้าสู่ระบบด้วย LINE" again just re-reads
+// the SAME stale token from local storage. isStaleTokenError_ detects that
+// specific failure so we can clear the session and force a fresh login
+// automatically instead of leaving them stranded on a red error message.
+function isStaleTokenError_(msg){
+  return !!msg && /expired|invalid_request|invalid_grant/i.test(msg);
+}
+function forceRelogin(){
+  try{ if(window.liff && liff.isLoggedIn && liff.isLoggedIn()) liff.logout(); }catch(e){}
+  sessionStorage.removeItem('chuayReloginAttempted');
+  checkAuth();
+}
 async function checkAuth(){
   document.getElementById('loginMsg').textContent='';
   showOverlay(true,'กำลังเข้าสู่ระบบ LINE','กรุณารอสักครู่');
@@ -531,8 +548,19 @@ async function checkAuth(){
       showOverlay(false);
       document.getElementById('loadingScreen').style.display='none';
       if(user.loggedIn){
+        sessionStorage.removeItem('chuayReloginAttempted');
         currentUser=user;
         initApp();
+      } else if(isStaleTokenError_(user.error) && sessionStorage.getItem('chuayReloginAttempted')!=='1'){
+        // Stale cached token — clear the session and retry once,
+        // automatically, so the person doesn't have to understand what
+        // went wrong. Guarded to a single attempt per browser session to
+        // avoid a login/verify-fail redirect loop if something else is wrong.
+        sessionStorage.setItem('chuayReloginAttempted','1');
+        document.getElementById('loginScreen').style.display='flex';
+        document.getElementById('loginMsg').textContent='เซสชันหมดอายุ กำลังเข้าสู่ระบบใหม่ให้อัตโนมัติ...';
+        try{ liff.logout(); }catch(e){}
+        liff.login({redirectUri:location.href});
       } else {
         document.getElementById('loginScreen').style.display='flex';
         document.getElementById('loginMsg').textContent=user.error||'กรุณาเข้าสู่ระบบผ่าน LINE LIFF';
