@@ -520,6 +520,24 @@ async function checkAuth(){
     });
 }
 
+// Shows the "📦 package name · used X/Y" badge in the topbar using the
+// package info getCurrentUser already returns. Safe no-op if there's no
+// package data (badge just stays hidden) — never throws.
+function renderPlanBadge(){
+  const el = document.getElementById('planBadge');
+  if(!el) return;
+  const pkg = currentUser && currentUser.package;
+  if(!pkg){
+    el.style.display='none';
+    return;
+  }
+  const quotaText = (pkg.quotaPerMonth === null || pkg.quotaPerMonth === undefined)
+    ? 'ไม่จำกัด'
+    : (pkg.usageCount + '/' + pkg.quotaPerMonth + ' ครั้ง');
+  el.textContent = '📦 ' + pkg.name + ' · ' + quotaText;
+  el.style.display = 'inline-block';
+}
+
 function initApp(){
   document.getElementById('loadingScreen').style.display='none';
   document.getElementById('loginScreen').style.display='none';
