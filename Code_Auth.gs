@@ -906,19 +906,6 @@ function buildTaxFeatureMessage_(lineUserId) {
   if (sub && sub.pkg.hasTax) {
     return '🧾 ระบบทำบัญชี/ยื่นภาษีรายเดือน กำลังพัฒนาอยู่ค่ะ จะเปิดให้ใช้งานเร็วๆ นี้นะคะ (ท่านมีสิทธิ์ใช้งานฟีเจอร์นี้อยู่แล้วในแพ็ก ' + sub.pkg.name + ')';
   }
-  return '🧾 ฟีเจอร์ระบบบัญชี/ยื่นภาษี อยู่ในแพ็ก 990 บาท/เดือนเท่านั้นนะคะ พิมพ์ "แพ็กเกจ" เพื่อดูรายละเอียดและอัปเกรดได้เลยค่ะ';
-}
-
-// Only package 990 (hasAI) gets real AI answers; everyone else gets an upsell.
-function handleAiOrUpsell_(text, lineUserId) {
-  const sub = lineUserId ? getUserSubscription_(lineUserId) : null;
-  if (sub && sub.pkg.hasAI) {
-    return askGemini_(text);
-  }
-  return '🤖 ฟีเจอร์ AI ผู้ช่วยตอบคำถามอัตโนมัติ อยู่ในแพ็ก 990 บาท/เดือนค่ะ\n' +
-    'ตอนนี้หนูช่วยได้เฉพาะเมนูลัดก่อนนะคะ — พิมพ์ "แพ็กเกจ" เพื่อดูรายละเอียด หรือกดปุ่มเมนูด้านล่างเพื่อสร้างเอกสารได้เลยค่ะ 🌸';
-}
-
 // Restricted-scope FAQ system prompt — only answers questions about this
 // business / how to use the CHUAY document app. Anything else gets a
 // polite redirect instead of a free-ranging AI conversation.
