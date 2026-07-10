@@ -7,10 +7,22 @@ const SPREADSHEET_ID = '1ckKnGRcZS7RLu2qftr3WpdmDYSH4HR6oxioe3fTYH3g';
 const LINE_LOGIN_CHANNEL_ID = '2010618788';
 
 // ── Packages ──────────────────────────────────────────────────
-// Payment collection is NOT automated yet — admin assigns/renews packages
-// manually by editing the "Subscriptions" sheet (LINE User ID + Package +
-// Expiry Date). This just enforces the limits once a package is assigned.
+// Payment collection is NOT automated yet — admin assigns/renews paid
+// packages manually by editing the "Subscriptions" sheet (LINE User ID +
+// Package + Expiry Date). Every LINE account that ever touches the app
+// (LIFF login or bot chat) is auto-enrolled in the "free" trial the first
+// time we see them — see getOrCreateSubscriptionRow_ — so there's no more
+// "no package yet" dead end. The free trial is a LIFETIME cap (not
+// monthly): FREE_TRIAL_LIMIT total document generations, tracked in the
+// "Total Usage Count" column, then generatePDF returns upgradeRequired:true
+// so the frontend can show the "please subscribe" popup.
+const FREE_TRIAL_LIMIT = 50;
+
 const PACKAGES = {
+  free: {
+    id: 'free', name: 'ทดลองใช้ฟรี', price: 0,
+    quotaPerMonth: null, hasAI: false, hasTax: false, isTrial: true
+  },
   trial99: {
     id: 'trial99', name: 'แพ็คเริ่มต้น', price: 99,
     quotaPerMonth: 30, hasAI: false, hasTax: false, trialDays: 7
@@ -26,7 +38,7 @@ const PACKAGES = {
 };
 
 function getSubscriptionSheet_(ss) {
-  const headers = ['LINE User ID', 'Package', 'Start Date', 'Expiry Date', 'Usage Month', 'Usage Count', 'Last Updated'];
+  const headers = ['LINE User ID', 'Package', 'Start Date', 'Expiry Date', 'Usage Month', 'Usage Count', 'Last Updated', 'Total Usage Count'];
   let sheet = ss.getSheetByName('Subscriptions');
   if (!sheet) {
     sheet = ss.insertSheet('Subscriptions');
@@ -34,6 +46,13 @@ function getSubscriptionSheet_(ss) {
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#f0f0f0');
+  } else if (sheet.getLastColumn() < headers.length) {
+    // Older sheets predate the "Total Usage Count" column (added for the
+    // lifetime free-trial cap) — backfill just the missing header(s).
+    const startCol = sheet.getLastColumn() + 1;
+    sheet.getRange(1, startCol, 1, headers.length - startCol + 1)
+      .setValues([headers.slice(startCol - 1)])
+      .setFontWeight('bold').setBackground('#f0f0f0');
   }
   return sheet;
 }
@@ -46,43 +65,82 @@ function findSubscriptionRow_(sheet, lineUserId) {
   return null;
 }
 
-// Returns null if the user has no package or it has expired.
+// Every LINE account gets a row the first time we see them (LIFF login or
+// bot chat) — auto-enrolled in the "free" trial. This is what makes "new
+// customer, no row yet" no longer a dead end: they get FREE_TRIAL_LIMIT
+// free document generations before anything blocks them.
+function getOrCreateSubscriptionRow_(sheet, lineUserId) {
+  const found = findSubscriptionRow_(sheet, lineUserId);
+  if (found) return found;
+  const now = new Date();
+  // [LINE User ID, Package, Start Date, Expiry Date, Usage Month, Usage Count, Last Updated, Total Usage Count]
+  sheet.appendRow([lineUserId, 'free', now, '', '', 0, now, 0]);
+  return { rowIndex: sheet.getLastRow(), row: [lineUserId, 'free', now, '', '', 0, now, 0] };
+}
+
+// Always returns a subscription (never null) — new/unknown users are
+// auto-enrolled in the free trial by getOrCreateSubscriptionRow_. A paid
+// package that has expired falls back to the free trial's lifetime count
+// rather than blocking outright, so the behavior is consistent everywhere:
+// "50 free lifetime uses, then a popup to subscribe/renew."
 function getUserSubscription_(lineUserId) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = getSubscriptionSheet_(ss);
-  const found = findSubscriptionRow_(sheet, lineUserId);
-  if (!found) return null;
+  const found = getOrCreateSubscriptionRow_(sheet, lineUserId);
 
-  const packageId  = found.row[1];
-  const expiryDate = found.row[3];
-  const usageMonth = found.row[4];
-  const usageCount = found.row[5];
+  const packageId       = found.row[1];
+  const expiryDate      = found.row[3];
+  const usageMonth      = found.row[4];
+  const usageCount      = found.row[5];
+  const totalUsageCount = Number(found.row[7] || 0);
 
-  const pkg = PACKAGES[packageId];
-  if (!pkg) return null;
-  if (expiryDate && new Date(expiryDate) < new Date()) return null; // expired
+  const pkg = PACKAGES[packageId] || PACKAGES.free;
+  const expired = pkg.id !== 'free' && expiryDate && new Date(expiryDate) < new Date();
+
+  if (pkg.id === 'free' || expired) {
+    return {
+      pkg: PACKAGES.free,
+      rowIndex: found.rowIndex,
+      usageCount: totalUsageCount,
+      usageMonth: null,
+      totalUsageCount: totalUsageCount
+    };
+  }
 
   const currentMonthKey = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM');
   const count = (usageMonth === currentMonthKey) ? Number(usageCount || 0) : 0;
 
-  return { pkg: pkg, rowIndex: found.rowIndex, usageCount: count, usageMonth: currentMonthKey };
+  return { pkg: pkg, rowIndex: found.rowIndex, usageCount: count, usageMonth: currentMonthKey, totalUsageCount: totalUsageCount };
 }
 
-// Checks quota and, if allowed, increments usage for this month.
+// Checks quota and, if allowed, increments usage.
 // Call this right before generating a document.
 function checkAndConsumeQuota_(lineUserId) {
   const sub = getUserSubscription_(lineUserId);
-  if (!sub) {
-    return { allowed: false, reason: 'no_package' };
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = getSubscriptionSheet_(ss);
+
+  if (sub.pkg.id === 'free') {
+    if (sub.totalUsageCount >= FREE_TRIAL_LIMIT) {
+      return { allowed: false, reason: 'trial_exceeded', pkg: sub.pkg, trialLimit: FREE_TRIAL_LIMIT };
+    }
+    sheet.getRange(sub.rowIndex, 7).setValue(new Date());               // Last Updated
+    sheet.getRange(sub.rowIndex, 8).setValue(sub.totalUsageCount + 1);  // Total Usage Count
+    return {
+      allowed: true,
+      pkg: sub.pkg,
+      remaining: FREE_TRIAL_LIMIT - sub.totalUsageCount - 1,
+      trialLimit: FREE_TRIAL_LIMIT
+    };
   }
+
   if (sub.pkg.quotaPerMonth !== null && sub.usageCount >= sub.pkg.quotaPerMonth) {
     return { allowed: false, reason: 'quota_exceeded', pkg: sub.pkg };
   }
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = getSubscriptionSheet_(ss);
-  sheet.getRange(sub.rowIndex, 5).setValue(sub.usageMonth);      // Usage Month
-  sheet.getRange(sub.rowIndex, 6).setValue(sub.usageCount + 1);  // Usage Count
-  sheet.getRange(sub.rowIndex, 7).setValue(new Date());          // Last Updated
+  sheet.getRange(sub.rowIndex, 5).setValue(sub.usageMonth);              // Usage Month
+  sheet.getRange(sub.rowIndex, 6).setValue(sub.usageCount + 1);          // Usage Count
+  sheet.getRange(sub.rowIndex, 7).setValue(new Date());                  // Last Updated
+  sheet.getRange(sub.rowIndex, 8).setValue(sub.totalUsageCount + 1);     // Total Usage Count (lifetime, for reporting)
   return {
     allowed: true,
     pkg: sub.pkg,
@@ -151,7 +209,10 @@ function doPost(e) {
 function getCurrentUser(lineAuth) {
   try {
     const user = verifyLineUser_(lineAuth);
+    // Auto-enrolls the account in the free trial on first sight — every
+    // logged-in user now always has a package (never null).
     const sub = getUserSubscription_(user.lineUserId);
+    const isTrial = sub.pkg.id === 'free';
     return {
       loggedIn: true,
       userKey: user.userKey,
@@ -160,14 +221,17 @@ function getCurrentUser(lineAuth) {
       displayName: user.name,
       pictureUrl: user.pictureUrl,
       email: user.email || '',
-      package: sub ? {
+      package: {
         id: sub.pkg.id,
         name: sub.pkg.name,
-        quotaPerMonth: sub.pkg.quotaPerMonth,
-        usageCount: sub.usageCount,
+        // For the free trial, quota/usage are lifetime totals (not
+        // monthly) — reuses the same "X/Y ครั้ง" badge shape as paid plans.
+        quotaPerMonth: isTrial ? FREE_TRIAL_LIMIT : sub.pkg.quotaPerMonth,
+        usageCount: isTrial ? sub.totalUsageCount : sub.usageCount,
         hasAI: sub.pkg.hasAI,
-        hasTax: sub.pkg.hasTax
-      } : null
+        hasTax: sub.pkg.hasTax,
+        isTrial: isTrial
+      }
     };
   } catch(e) {
     console.log('getCurrentUser error:', e);
@@ -562,10 +626,20 @@ function generatePDF(formData, lineAuth) {
 
     const quota = checkAndConsumeQuota_(user.lineUserId);
     if (!quota.allowed) {
-      if (quota.reason === 'no_package') {
-        throw new Error('บัญชีนี้ยังไม่ได้สมัครแพ็กเกจ กรุณาสมัครแพ็กเกจก่อนใช้งาน (พิมพ์ "แพ็กเกจ" ในแชทเพื่อดูรายละเอียด)');
+      // upgradeRequired:true tells the frontend to show the "subscribe"
+      // popup instead of a plain error toast.
+      if (quota.reason === 'trial_exceeded') {
+        return {
+          success: false,
+          upgradeRequired: true,
+          error: 'คุณใช้งานฟรีครบ ' + quota.trialLimit + ' ครั้งแล้ว กรุณาสมัครแพ็กเกจเพื่อใช้งานต่อค่ะ 🙏'
+        };
       }
-      throw new Error('ใช้งานครบโควตา ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนของแพ็ก "' + quota.pkg.name + '" แล้ว กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานต่อ (พิมพ์ "แพ็กเกจ" ในแชทเพื่อดูรายละเอียด)');
+      return {
+        success: false,
+        upgradeRequired: true,
+        error: 'ใช้งานครบโควตา ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนของแพ็ก "' + quota.pkg.name + '" แล้ว กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานต่อค่ะ'
+      };
     }
 
     if (!formData.companyName) throw new Error('กรุณากรอกชื่อบริษัท');
@@ -946,6 +1020,7 @@ function isTaxFeatureQuery_(text) {
 
 function buildPackageInfoMessage_() {
   return '📦 แพ็กเกจของ ง่าย ผู้ช่วยทำเอกสาร\n\n' +
+    '🆓 ทดลองใช้ฟรี ' + FREE_TRIAL_LIMIT + ' ครั้งแรก (ทุกบัญชีใหม่)\n\n' +
     '1️⃣ แพ็คเริ่มต้น 99 บาท/เดือน\n' +
     '• ใช้งานฟรี 7 วันแรก\n' +
     '• สร้างเอกสารได้ 30 ครั้ง/เดือน\n\n' +
