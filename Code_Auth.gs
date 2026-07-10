@@ -398,6 +398,38 @@ function getCashTransactions(lineAuth) {
   }
 }
 
+// Auto-import: called from generatePDF whenever a "ใบเสร็จรับเงิน" (receipt)
+// is generated. Logs the receipt's total as income in CashTransactions,
+// tagged so it's traceable back to the source document. Uses the PDF's
+// own doc number as a dedupe key so re-generating the same receipt number
+// doesn't double-count income.
+function importReceiptAsIncome_(lineUserId, formData) {
+  try {
+    const total = calcTotal(formData).grand;
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = getCashTransactionSheet_(ss);
+    const data = sheet.getDataRange().getValues();
+    const dedupeTag = '[receipt:' + (formData.docNo || '') + ']';
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === lineUserId && String(data[i][6] || '').indexOf(dedupeTag) > -1) {
+        return; // already imported this receipt — don't double count
+      }
+    }
+    sheet.appendRow([
+      lineUserId,
+      formData.docDate || Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd'),
+      'รับชำระจาก ' + (formData.customerName || formData.vendorName || 'ลูกค้า') + ' (' + (formData.docNo || '') + ')',
+      total,
+      0,
+      0,
+      'นำเข้าอัตโนมัติจากใบเสร็จรับเงิน ' + dedupeTag,
+      new Date()
+    ]);
+  } catch (e) {
+    // Never let an accounting-sync hiccup break PDF generation itself.
+  }
+}
+
 function saveCashTransaction(transaction, lineAuth) {
   try {
     const user = verifyLineUser_(lineAuth);
@@ -561,6 +593,12 @@ function generatePDF(formData, lineAuth) {
       formData.customerBranch  || formData.vendorBranch  || '',
       formData.customerPhone   || formData.vendorPhone   || ''
     );
+    // Auto-import into the accounting system: only "ใบเสร็จรับเงิน" (receipt)
+    // represents money actually received, so only receipts count as income
+    // for tax purposes — quotations/PO/invoice aren't real cash movement yet.
+    if (formData.docType === 'receipt') {
+      importReceiptAsIncome_(user.lineUserId, formData);
+    }
     return {
       success: true,
       url: pdfFile.getUrl(),
@@ -841,6 +879,16 @@ function findKeywordReply_(text) {
   }) || null;
 }
 
+// Lists every document type with its direct deep link — used when the AI
+// can't answer (e.g. Gemini hiccup) so the customer still gets something
+// immediately useful instead of a dead-end error.
+function buildDocumentMenuMessage_() {
+  const lines = KEYWORD_REPLIES_.map(function(k) {
+    return '📄 ' + k.label + '\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + k.type;
+  });
+  return 'หนูสามารถทำเอกสารได้ดังนี้ค่ะ 🌸\n\n' + lines.join('\n\n');
+}
+
 // Entry point LINE calls (routed here from doPost when body.events exists)
 function handleLineWebhook_(body) {
   const events = body.events || [];
@@ -856,6 +904,8 @@ function handleLineWebhook_(body) {
 
       if (match) {
         replyText = '👉 ' + match.label + '\nกดลิงก์นี้เพื่อเริ่มได้เลยค่ะ 💕\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + match.type;
+      } else if (isMenuQuery_(text)) {
+        replyText = buildDocumentMenuMessage_();
       } else if (isPackageInfoQuery_(text)) {
         replyText = buildPackageInfoMessage_();
       } else if (isTaxFeatureQuery_(text)) {
@@ -871,6 +921,13 @@ function handleLineWebhook_(body) {
   });
   return ContentService.createTextOutput(JSON.stringify({ ok: true }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function isMenuQuery_(text) {
+  const lower = (text || '').toLowerCase();
+  return ['เมนู', 'menu', 'ทำอะไรได้บ้าง', 'ช่วยอะไรได้บ้าง'].some(function(kw) {
+    return lower.indexOf(kw) > -1;
+  });
 }
 
 function isPackageInfoQuery_(text) {
@@ -953,9 +1010,9 @@ function askGemini_(userText) {
     if (data.candidates && data.candidates[0] && data.candidates[0].content) {
       return data.candidates[0].content.parts[0].text.trim();
     }
-    return 'ขออภัยค่ะ ตอนนี้หนูตอบไม่ได้ ลองพิมพ์ใหม่อีกครั้ง หรือพิมพ์ "เมนู" เพื่อดูตัวเลือกได้นะคะ 🌸';
+    return buildDocumentMenuMessage_();
   } catch (err) {
-    return 'ขออภัยค่ะ ระบบขัดข้องชั่วคราว ลองใหม่อีกครั้งได้เลยนะคะ 🙏';
+    return buildDocumentMenuMessage_();
   }
 }
 
