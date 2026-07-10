@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>CHUAY — ระบบสร้างเอกสาร</title>
+<title>CHUAY — บัญชีเงินสดรับ-จ่าย</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
@@ -20,7 +20,7 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 /* ── Loading screen ── */
 #loadingScreen{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
 .load-logo{font-size:32px;font-weight:900;letter-spacing:-.04em;display:flex;align-items:center;gap:10px}
-.load-mark{width:44px;height:44px;border:2.5px solid var(--ink);border-radius:10px;background:linear-gradient(145deg,#A5E4FF 0%,#82CBFF 50%,var(--accent) 51%);display:grid;place-items:center;font-size:22px;box-shadow:var(--shadow)}
+.load-mark{width:44px;height:44px;border:2.5px solid var(--ink);border-radius:10px;background:linear-gradient(145deg,#FFD3B6 0%,#FFB199 50%,var(--accent) 51%);display:grid;place-items:center;font-size:22px;box-shadow:var(--shadow)}
 .load-spinner{width:32px;height:32px;border:3px solid #ddd;border-top-color:var(--ink);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -29,8 +29,7 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 .login-card{background:var(--surface);border:2px solid var(--ink);border-radius:16px;box-shadow:var(--shadow);padding:40px 36px;max-width:400px;width:100%;text-align:center}
 .login-logo{display:flex;align-items:center;justify-content:center;gap:10px;font-size:24px;font-weight:900;letter-spacing:-.04em;margin-bottom:8px}
 .login-sub{font-size:13px;color:var(--muted);margin-bottom:28px}
-.login-divider{border:0;border-top:1px solid var(--border);margin:20px 0}
-.login-note{font-size:11px;color:var(--muted);line-height:1.6}
+.login-note{font-size:11px;color:var(--muted);line-height:1.6;margin-top:14px}
 .line-btn{width:100%;border:1.5px solid var(--ink);border-radius:var(--r-sm);padding:12px 20px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;background:#06C755;color:#fff;box-shadow:var(--shadow-sm);transition:var(--t);display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px}
 .line-btn:hover{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
 .line-icon{width:20px;height:20px;border-radius:5px;background:#fff;color:#06C755;display:grid;place-items:center;font-size:12px;font-weight:900}
@@ -41,82 +40,56 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 /* ── Topbar ── */
 .topbar{position:sticky;top:0;z-index:100;background:rgba(245,246,242,.95);backdrop-filter:blur(16px);border-bottom:1.5px solid var(--border);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between}
 .logo{display:flex;align-items:center;gap:9px;font-weight:900;font-size:18px;letter-spacing:-.03em;color:var(--ink);text-decoration:none}
-.logo-mark{width:32px;height:32px;border:2px solid var(--ink);border-radius:8px;background:linear-gradient(145deg,#A5E4FF 0%,#82CBFF 50%,var(--accent) 51%);display:grid;place-items:center;font-size:15px;box-shadow:var(--shadow-sm)}
+.logo-mark{width:32px;height:32px;border:2px solid var(--ink);border-radius:8px;background:linear-gradient(145deg,#FFD3B6 0%,#FFB199 50%,var(--accent) 51%);display:grid;place-items:center;font-size:15px;box-shadow:var(--shadow-sm)}
 .user-bar{display:flex;align-items:center;gap:10px}
-.user-pill{display:flex;align-items:center;gap:7px;border:1.5px solid var(--border);border-radius:999px;padding:5px 12px 5px 7px;font-size:12px;font-weight:600;background:var(--surface);cursor:pointer;transition:var(--t)}
-.user-pill:hover{border-color:var(--ink)}
+.user-pill{display:flex;align-items:center;gap:7px;border:1.5px solid var(--border);border-radius:999px;padding:5px 12px 5px 7px;font-size:12px;font-weight:600;background:var(--surface)}
 .user-avatar{width:26px;height:26px;border-radius:50%;background:var(--accent);border:1.5px solid var(--ink);display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0}
-.user-email{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.profile-btn{border:1.5px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;background:var(--surface);transition:var(--t)}
-.profile-btn:hover{border-color:var(--ink);background:var(--accent)}
 
-/* ── Doc tabs ── */
-.doc-selector{padding:18px 24px 0;max-width:960px;margin:0 auto}
-.doc-tabs{display:flex;gap:8px;flex-wrap:wrap}
-.doc-tab{border:1.5px solid var(--ink);border-radius:999px;padding:7px 16px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--surface);box-shadow:var(--shadow-sm);transition:var(--t);color:var(--ink)}
-.doc-tab:hover{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
-.doc-tab.active{box-shadow:var(--shadow-sm)}
-
-/* ── Main grid ── */
-.main{max-width:960px;margin:18px auto 80px;padding:0 24px;display:grid;grid-template-columns:1fr 296px;gap:16px;align-items:start}
-@media(max-width:720px){.main{grid-template-columns:1fr}.preview-col{display:none}}
+/* ── Main ── */
+.main{max-width:640px;margin:20px auto 80px;padding:0 20px}
 
 /* ── Cards ── */
-.card{background:var(--surface);border:1.5px solid var(--ink);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;margin-bottom:14px}
+.card{background:var(--surface);border:1.5px solid var(--ink);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;margin-bottom:16px}
 .card-head{padding:11px 16px;border-bottom:1.5px solid var(--border);background:#FAFBF7;display:flex;align-items:center;justify-content:space-between}
-.card-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
+.card-title{font-size:14px;font-weight:800;display:flex;align-items:center;gap:7px}
 .card-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--ink);border-radius:999px;padding:2px 9px}
 .card-body{padding:16px}
 
-/* ── Profile panel ── */
-.profile-panel{display:none;position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.4);backdrop-filter:blur(6px)}
-.profile-panel.open{display:flex;align-items:flex-start;justify-content:flex-end}
-.profile-drawer{background:var(--surface);border-left:2px solid var(--ink);width:380px;max-width:90vw;height:100vh;overflow-y:auto;padding:24px;box-shadow:-6px 0 0 var(--ink)}
-.drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
-.drawer-title{font-size:18px;font-weight:800}
-.close-btn{border:1.5px solid var(--border);border-radius:var(--r-sm);width:34px;height:34px;display:grid;place-items:center;cursor:pointer;font-size:18px;background:var(--surface);transition:var(--t)}
-.close-btn:hover{background:#ffe0dc;border-color:#c0392b;color:#c0392b}
-.profile-user{display:flex;align-items:center;gap:12px;padding:14px;background:#FAFBF7;border:1.5px solid var(--border);border-radius:var(--r);margin-bottom:20px}
-.profile-avatar-lg{width:44px;height:44px;border-radius:50%;background:var(--accent);border:2px solid var(--ink);display:grid;place-items:center;font-size:18px;font-weight:800;flex-shrink:0}
-.profile-name{font-weight:700;font-size:14px}
-.profile-email-sm{font-size:12px;color:var(--muted);margin-top:2px}
-.save-status{font-size:12px;text-align:center;min-height:18px;color:var(--muted);margin-top:8px}
-
-/* ── History panel ── */
-.history-item{border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:8px;cursor:pointer;transition:var(--t)}
-.history-item:hover{border-color:var(--ink);background:#FAFBF7}
-.history-no{font-size:13px;font-weight:700}
-.history-meta{font-size:11px;color:var(--muted);margin-top:2px}
-.history-total{font-size:13px;font-weight:700;color:var(--ink)}
-
-/* ── Form ── */
+/* ── Form fields ── */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 .col2{grid-column:1/-1}
-.field{display:flex;flex-direction:column;gap:4px}
-.field label{font-size:12px;font-weight:600;color:#3a3a3a}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:11px}
+.field label{font-size:12px;font-weight:700;color:#3a3a3a}
 .req{color:#e53e3e;margin-left:2px}
-.field input,.field textarea,.field select{width:100%;border:1.5px solid var(--border);border-radius:var(--r-sm);padding:9px 12px;font:inherit;font-size:13px;outline:none;transition:var(--t);background:var(--surface)}
-.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(201,239,62,.35)}
+.field input,.field textarea{width:100%;border:1.5px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;font:inherit;font-size:13px;outline:none;transition:var(--t);background:var(--surface)}
+.field input:focus,.field textarea:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(201,239,62,.35)}
 .field textarea{resize:vertical;min-height:58px}
 
-/* ── Items ── */
-.items-wrap{border:1.5px solid var(--ink);border-radius:var(--r-sm);overflow:hidden;margin-bottom:11px}
-.items-head{display:grid;grid-template-columns:1fr 68px 90px 76px 34px;background:var(--ink);color:#fff}
-.items-head span{padding:7px 9px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
-.items-head span:not(:first-child){text-align:right}
-.item-row{display:grid;grid-template-columns:1fr 68px 90px 76px 34px;border-top:1px solid var(--border)}
-.item-row:nth-child(even){background:#FAFBF7}
-.item-row input{border:none;border-right:1px solid var(--border);padding:8px 9px;font:inherit;font-size:12.5px;outline:none;background:transparent;width:100%}
-.item-row input:last-of-type{border-right:none}
-.item-row input:focus{background:#FFFEF5;box-shadow:inset 0 -2px 0 var(--accent)}
-.num{text-align:right}
-.btn-rm{border:none;background:#FFF0EE;color:#C0392B;cursor:pointer;padding:0 9px;font-size:16px;font-weight:700;transition:background .15s;display:flex;align-items:center;justify-content:center}
-.btn-rm:hover{background:#FFDBD7}
-.add-btn{width:100%;border:1.5px dashed var(--ink);background:transparent;border-radius:var(--r-sm);padding:8px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted);margin-bottom:12px;transition:var(--t)}
-.add-btn:hover{background:#EEEFD8;color:var(--ink)}
+/* ── Buttons (Neubrutalism: hard shadow, press-down on click) ── */
+.btn{border:1.5px solid var(--ink);border-radius:var(--r-sm);padding:12px 18px;font:inherit;font-size:14px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;box-shadow:var(--shadow);transition:var(--t);width:100%;background:var(--surface)}
+.btn:hover:not(:disabled){transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.btn:active:not(:disabled){transform:translate(4px,4px);box-shadow:0 0 0 var(--ink)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--ink);color:#fff}
+.btn-accent{background:var(--accent)}
+.btn-pink{background:#FFB199}
+.btn-sky{background:#A5E4FF}
+.btn-mint{background:#A8E6CF}
+.btn-sm{padding:8px 14px;font-size:12px;box-shadow:var(--shadow-sm);width:auto}
+.btn-sm:hover:not(:disabled){box-shadow:1px 1px 0 var(--ink)}
 
-/* ── VAT ── */
-.vat-row{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+/* ── Transaction list ── */
+.tx-item{border:1.5px solid var(--ink);border-radius:var(--r-sm);padding:11px 13px;margin-bottom:9px;background:var(--surface);box-shadow:var(--shadow-sm);transition:var(--t)}
+.tx-item:hover{transform:translate(1px,1px);box-shadow:0 0 0 var(--ink)}
+.tx-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.tx-desc{font-weight:700;font-size:13px}
+.tx-date{font-size:11px;color:var(--muted);margin-top:2px}
+.tx-amounts{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:12px;white-space:nowrap}
+.tx-income{color:#1a8a3c;font-weight:800}
+.tx-expense{color:#c0392b;font-weight:700}
+.tx-remarks{font-size:11px;color:var(--muted);margin-top:5px;padding-top:5px;border-top:1px dashed var(--border)}
+
+/* ── Toggle for VAT-style switches (reuse pattern) ── */
 .toggle{position:relative;width:36px;height:20px;flex-shrink:0}
 .toggle input{opacity:0;width:0;height:0}
 .tslider{position:absolute;inset:0;background:#D5D7CF;border-radius:999px;border:1.5px solid #aaa;cursor:pointer;transition:.2s}
@@ -124,47 +97,11 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 .toggle input:checked+.tslider{background:var(--ink);border-color:var(--ink)}
 .toggle input:checked+.tslider::before{transform:translateX(15px)}
 
-/* ── Totals ── */
-.totals-box{margin-left:auto;max-width:240px;border:1.5px solid var(--border);border-radius:var(--r-sm);overflow:hidden}
-.total-row{display:flex;justify-content:space-between;padding:8px 12px;font-size:13px;border-bottom:1px solid var(--border)}
-.total-row:last-child{border-bottom:none}
-.total-row span:first-child{color:var(--muted)}
-.total-row span:last-child{font-weight:700}
-.total-grand{background:var(--ink);color:#fff}
-.total-grand span{font-size:15px;font-weight:800}
-.total-grand span:first-child{color:#ccc}
-
-/* ── Actions ── */
-.form-actions{display:flex;gap:10px;margin-top:4px}
-.btn{border:1.5px solid var(--ink);border-radius:var(--r-sm);padding:11px 18px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px;box-shadow:var(--shadow);transition:var(--t)}
-.btn:hover:not(:disabled){transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-.btn-primary{background:var(--ink);color:#fff;flex:1;justify-content:center}
-.btn-accent{background:var(--accent)}
-.btn-sm{padding:7px 14px;font-size:13px;box-shadow:var(--shadow-sm)}
-.btn-sm:hover:not(:disabled){box-shadow:1px 1px 0 var(--ink)}
-
-/* ── Preview ── */
-.preview-col .card{position:sticky;top:78px}
-.preview-doc{border:1px solid var(--border);border-radius:6px;background:#fff;padding:14px;min-height:320px}
-.prev-hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1.5px solid #111;padding-bottom:9px;margin-bottom:9px}
-.prev-co{font-size:13px;font-weight:800;margin-bottom:2px}
-.prev-addr{font-size:9px;color:#888}
-.prev-badge{text-align:right}
-.prev-type{font-size:9px;font-weight:700;text-transform:uppercase;color:#888}
-.prev-no{font-size:13px;font-weight:900}
-.prev-date{font-size:9px;color:#888}
-.prev-title{text-align:center;font-size:10px;font-weight:800;border:1.5px solid #111;padding:4px;margin-bottom:9px;letter-spacing:1pt}
-.preview-line{height:6px;background:#e8e9e3;border-radius:999px;margin-bottom:6px}
-.prev-table{border:1px solid #ddd;border-radius:5px;overflow:hidden;margin-top:9px}
-.prev-tr{display:grid;grid-template-columns:1fr 60px;border-top:1px solid #eee;padding:5px 8px;font-size:10px}
-.prev-tr:first-child{background:#111;color:#fff;border-top:none;font-weight:700}
-.prev-total{text-align:right;font-size:15px;font-weight:900;margin-top:9px;padding-top:7px;border-top:2px solid #111}
-.preview-tip{font-size:11px;color:var(--muted);text-align:center;margin-top:10px;line-height:1.5}
-
-/* ── History sidebar ── */
-.history-section{margin-top:14px}
-.history-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+/* ── Summary strip ── */
+.summary-strip{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+.summary-box{border:1.5px solid var(--ink);border-radius:var(--r-sm);padding:10px;text-align:center;box-shadow:var(--shadow-sm)}
+.summary-box .label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase}
+.summary-box .val{font-size:15px;font-weight:900;margin-top:3px}
 
 /* ── Overlay ── */
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;place-items:center;backdrop-filter:blur(6px)}
@@ -175,7 +112,7 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 .overlay-sub{font-size:12px;color:#888}
 
 /* ── Success ── */
-.success-card{display:none;background:#fff;border:2px solid var(--ink);border-radius:var(--r);box-shadow:var(--shadow);padding:26px;text-align:center;margin-bottom:14px}
+.success-card{display:none;background:#fff;border:2px solid var(--ink);border-radius:var(--r);box-shadow:var(--shadow);padding:26px;text-align:center;margin-bottom:16px}
 .success-card.show{display:block}
 .success-icon{font-size:42px;margin-bottom:10px}
 .success-card h3{font-size:19px;font-weight:800;margin-bottom:5px}
@@ -187,37 +124,30 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 22px;border-radius:999px;font-size:13px;font-weight:600;z-index:300;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
 .toast.show{opacity:1}
 
-@media(max-width:600px){
-  .grid2{grid-template-columns:1fr}.col2{grid-column:1}
-  .topbar,.doc-selector,.main{padding-left:14px;padding-right:14px}
-  .items-head{grid-template-columns:1fr 60px 80px 32px}
-  .item-row{grid-template-columns:1fr 60px 80px 32px}
-  .items-head span:nth-child(4),.item-row input:nth-child(4){display:none}
-  .profile-drawer{width:100vw}
-}
+.hint{font-size:11px;color:var(--muted);line-height:1.6;padding:0 2px 4px}
 </style>
 </head>
 <body>
 
 <!-- Loading -->
 <div id="loadingScreen">
-  <div class="load-logo"><div class="load-mark">📄</div>CHUAY</div>
+  <div class="load-logo"><div class="load-mark">🧾</div>CHUAY</div>
   <div class="load-spinner"></div>
-  <div style="font-size:13px;color:#888">กำลังโหลด...</div>
+  <div style="font-size:13px;color:#888">กำลังโหลดความน่ารัก... 🌸</div>
 </div>
 
 <!-- Login -->
-<div id="loginScreen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:var(--bg)">
+<div id="loginScreen">
   <div class="login-card">
-    <div class="login-logo"><div class="logo-mark">📄</div>CHUAY</div>
-    <div style="font-size:22px;font-weight:900;margin-bottom:4px">ยินดีต้อนรับ</div>
-    <div class="login-sub">ระบบสร้างเอกสารธุรกิจ · ใบเสนอราคา Invoice PO และอื่นๆ</div>
+    <div class="login-logo"><div class="logo-mark">🧾</div>CHUAY</div>
+    <div style="font-size:22px;font-weight:900;margin-bottom:4px">บัญชีเงินสดรับ-จ่าย 💰</div>
+    <div class="login-sub">จดง่าย ดูง่าย สรุปเป็น PDF ได้ในคลิกเดียว</div>
     <div style="background:#FAFBF7;border:1.5px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:16px;text-align:left">
       <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">เข้าสู่ระบบด้วย LINE</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.7">
-        ✅ เปิดจาก LINE OA หรือ LIFF URL ได้ทันที<br>
-        ✅ ข้อมูลบริษัทบันทึกอัตโนมัติ<br>
-        ✅ ดูประวัติเอกสารย้อนหลัง
+        ✅ ใช้ข้อมูลบริษัทเดียวกับแอปหลัก ไม่ต้องกรอกซ้ำ<br>
+        ✅ บันทึกรายรับ-รายจ่ายได้ทุกที่<br>
+        ✅ สรุปเป็นรายงาน PDF ได้ทันที
       </div>
     </div>
     <div id="loginMsg" style="font-size:13px;color:#e53e3e;min-height:20px;margin-bottom:8px"></div>
@@ -225,7 +155,7 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
       <span class="line-icon">L</span>
       เข้าสู่ระบบด้วย LINE
     </button>
-    <div class="login-note">ระบบนี้ใช้ LINE Login ผ่าน LIFF เพื่อยืนยันตัวตนและบันทึกข้อมูลของคุณ</div>
+    <div class="login-note">ระบบนี้ใช้ LINE Login ผ่าน LIFF เพื่อยืนยันตัวตนและบันทึกข้อมูลของคุณค่ะ</div>
   </div>
 </div>
 
@@ -233,734 +163,343 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 <div class="overlay" id="overlay">
   <div class="overlay-box">
     <div class="overlay-spinner"></div>
-    <div class="overlay-title" id="overlayTitle">กำลังสร้างเอกสาร</div>
-    <div class="overlay-sub" id="overlaySub">กรุณารอสักครู่ (5–20 วินาที)</div>
+    <div class="overlay-title" id="overlayTitle">กำลังทำงาน</div>
+    <div class="overlay-sub" id="overlaySub">รอสักครู่นะคะ 🌸</div>
   </div>
 </div>
 
-<!-- Toast -->
 <div class="toast" id="toast"></div>
-
-<!-- Profile Drawer -->
-<div class="profile-panel" id="profilePanel" onclick="handlePanelClick(event)">
-  <div class="profile-drawer">
-    <div class="drawer-head">
-      <div class="drawer-title">⚙️ โปรไฟล์บริษัท</div>
-      <button class="close-btn" onclick="closeProfile()">✕</button>
-    </div>
-    <div class="profile-user">
-      <div class="profile-avatar-lg" id="drawerAvatar">U</div>
-      <div>
-        <div class="profile-name" id="drawerName">ชื่อผู้ใช้</div>
-        <div class="profile-email-sm" id="drawerEmail">email</div>
-      </div>
-    </div>
-    <div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.08em">ข้อมูลบริษัท</div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div class="field"><label>ชื่อบริษัท / ร้านค้า</label><input id="p_companyName" placeholder="บริษัท ตัวอย่าง จำกัด"/></div>
-        <div class="field"><label>ที่อยู่</label><textarea id="p_companyAddress" rows="2" placeholder="ที่อยู่บริษัท"></textarea></div>
-        <div class="field"><label>เลขประจำตัวผู้เสียภาษี</label><input id="p_companyTaxId" placeholder="0000000000000" maxlength="13"/></div>
-        <div class="field"><label>สำนักงานใหญ่/สาขา</label><input id="p_companyBranch" placeholder="สำนักงานใหญ่"/></div>
-        <div class="field"><label>เบอร์โทร</label><input id="p_companyPhone" placeholder="02-xxx-xxxx"/></div>
-        <div class="field"><label>อีเมลบริษัท</label><input id="p_companyEmail" type="email" placeholder="info@company.com"/></div>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <button class="btn btn-primary" onclick="saveProfile()">💾 บันทึกข้อมูล</button>
-      <button class="btn btn-accent" onclick="fillFromProfile()">📋 ใช้ข้อมูลนี้ในฟอร์ม</button>
-      <button class="btn" style="background:#fff" onclick="logout()">🚪 ออกจากระบบ</button>
-    </div>
-    <div class="save-status" id="saveStatus"></div>
-    <!-- History -->
-    <div class="history-section">
-      <div class="history-title">📄 เอกสารล่าสุด</div>
-      <div id="historyList"><div style="font-size:12px;color:var(--muted);text-align:center;padding:12px">กำลังโหลด...</div></div>
-    </div>
-  </div>
-</div>
 
 <!-- APP -->
 <div id="appScreen">
   <header class="topbar">
-    <a class="logo" href="#"><div class="logo-mark">📄</div>CHUAY</a>
+    <a class="logo" href="#"><div class="logo-mark">🧾</div>CHUAY บัญชี</a>
     <div class="user-bar">
-      <div class="user-pill" onclick="openProfile()">
+      <div class="user-pill">
         <div class="user-avatar" id="topAvatar">U</div>
-        <span class="user-email" id="topEmail">กำลังโหลด...</span>
+        <span id="topName">กำลังโหลด...</span>
       </div>
-      <button class="profile-btn" onclick="openProfile()">⚙️ บริษัท</button>
     </div>
   </header>
 
-  <section class="doc-selector"><div class="doc-tabs" id="docTabs"></div></section>
-
   <main class="main">
-    <div id="formArea">
 
-      <!-- Success -->
-      <div class="success-card" id="successCard">
-        <div class="success-icon">✅</div>
-        <h3>สร้างเอกสารสำเร็จ!</h3>
-        <p>บันทึกลง Google Drive และ Google Sheet เรียบร้อยแล้ว</p>
-        <a id="pdfBtn" href="#" target="_blank" class="pdf-btn">📄 เปิด PDF</a>
-        <br/><br/>
-        <button class="btn btn-accent" onclick="shareToCustomer()">📤 ส่งให้ลูกค้าทาง LINE</button>
-        <br/><br/>
-        <button class="btn btn-accent" onclick="newDoc()">🔄 สร้างเอกสารใหม่</button>
+    <!-- โปรไฟล์ (ใช้ร่วมกับแอปหลัก) -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">🏷️ ข้อมูลผู้ประกอบการ</div>
+        <span class="card-badge" style="background:#FFD3B6">โปรไฟล์</span>
       </div>
-
-      <!-- บริษัทเรา -->
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">🏢 ข้อมูลบริษัทของคุณ</div>
-          <button class="btn btn-accent btn-sm" onclick="openProfile()" title="แก้ไขข้อมูลบริษัท">✏️ แก้ไข</button>
+      <div class="card-body">
+        <div class="hint">ข้อมูลนี้ใช้ร่วมกับแอปสร้างเอกสารหลัก กรอกครั้งเดียวใช้ได้ทั้ง 2 ที่ค่ะ ✨</div>
+        <div class="field"><label>ชื่อบริษัท / ร้านค้า / ชื่อบุคคล<span class="req">*</span></label><input id="p_companyName" placeholder="บริษัท ตัวอย่าง จำกัด หรือ ชื่อ-นามสกุล"/></div>
+        <div class="field"><label>ที่อยู่</label><textarea id="p_companyAddress" rows="2" placeholder="ที่อยู่สำหรับออกรายงาน"></textarea></div>
+        <div class="grid2">
+          <div class="field"><label>เลขประจำตัวผู้เสียภาษี / เลขบัตรประชาชน</label><input id="p_companyTaxId" placeholder="0000000000000" maxlength="13"/></div>
+          <div class="field"><label>เบอร์โทร</label><input id="p_companyPhone" placeholder="08x-xxx-xxxx"/></div>
         </div>
-        <div class="card-body">
-          <div class="grid2">
-            <div class="field col2"><label>ชื่อบริษัท / ร้านค้า<span class="req">*</span></label><input id="companyName" placeholder="บริษัท ตัวอย่าง จำกัด" oninput="updatePreview()"/></div>
-            <div class="field col2"><label>ที่อยู่</label><textarea id="companyAddress" rows="2" placeholder="ที่อยู่บริษัท" oninput="updatePreview()"></textarea></div>
-            <div class="field"><label>เลขประจำตัวผู้เสียภาษี</label><input id="companyTaxId" placeholder="0000000000000" maxlength="13"/></div>
-            <div class="field"><label>สำนักงานใหญ่/สาขา</label><input id="companyBranch" placeholder="สำนักงานใหญ่"/></div>
-            <div class="field"><label>เบอร์โทร</label><input id="companyPhone" placeholder="02-xxx-xxxx"/></div>
-            <div class="field"><label>อีเมล</label><input id="companyEmail" type="email" placeholder="info@company.com"/></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- รายละเอียดเอกสาร -->
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title" id="docCardTitle">📋 รายละเอียดเอกสาร</div>
-          <span class="card-badge" id="docCardBadge" style="background:var(--accent)">QT</span>
-        </div>
-        <div class="card-body">
-          <div class="grid2">
-            <div class="field"><label>เลขที่เอกสาร<span class="req">*</span></label><input id="docNo" oninput="updatePreview()"/></div>
-            <div class="field"><label>ผู้ติดต่อ</label><input id="contactPerson" placeholder="ชื่อผู้ติดต่อ"/></div>
-            <div class="field"><label>วันที่ออกเอกสาร<span class="req">*</span></label><input id="docDate" type="date" oninput="updatePreview()"/></div>
-            <div class="field"><label id="extraDateLabel">วันหมดอายุ</label><input id="extraDate" type="date"/></div>
-            <div class="field col2" id="paymentWrap" style="display:none">
-              <label>วิธีชำระเงิน</label>
-              <select id="paymentMethod">
-                <option value="">-- เลือก --</option>
-                <option>เงินสด</option><option>โอนเงิน</option><option>เช็ค</option><option>บัตรเครดิต</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ผู้รับ -->
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title" id="receiverCardTitle">👤 ข้อมูลลูกค้า</div>
-          <span class="card-badge" style="background:#A8E6CF">ผู้รับ</span>
-        </div>
-        <div class="card-body">
-          <div class="grid2">
-            <div class="field col2"><label id="receiverNameLabel">ชื่อลูกค้า / บริษัท<span class="req">*</span></label><input id="customerName" list="customerDatalist" placeholder="บริษัท ลูกค้า จำกัด" oninput="updatePreview()"/><datalist id="customerDatalist"></datalist></div>
-            <div class="field col2"><label>ที่อยู่</label><textarea id="customerAddress" rows="2" placeholder="ที่อยู่ลูกค้า"></textarea></div>
-            <div class="field"><label>เลขประจำตัวผู้เสียภาษี</label><input id="customerTaxId" placeholder="0000000000000" maxlength="13"/></div>
-            <div class="field"><label>สำนักงานใหญ่/สาขา</label><input id="customerBranch" placeholder="สำนักงานใหญ่"/></div>
-            <div class="field"><label>เบอร์โทร</label><input id="customerPhone" placeholder="08x-xxx-xxxx"/></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- รายการสินค้า -->
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">📦 รายการสินค้า / บริการ</div>
-          <span class="card-badge" style="background:#FFE08A">Items</span>
-        </div>
-        <div class="card-body">
-          <div class="items-wrap">
-            <div class="items-head">
-              <span>รายการ</span>
-              <span style="text-align:right">จำนวน</span>
-              <span style="text-align:right">ราคา/หน่วย</span>
-              <span style="text-align:right">ส่วนลด</span>
-              <span></span>
-            </div>
-            <div id="itemsBody"></div>
-          </div>
-          <button class="add-btn" onclick="addRow()">＋ เพิ่มรายการ</button>
-          <div class="vat-row">
-            <label class="toggle"><input type="checkbox" id="includeVat" onchange="calcRender()"/><span class="tslider"></span></label>
-            <span style="font-size:13px;font-weight:600">รวม VAT 7%</span>
-          </div>
-          <div class="totals-box">
-            <div class="total-row"><span>ยอดรวมก่อน VAT</span><span id="subVal">0.00 บาท</span></div>
-            <div class="total-row" id="vatRow" style="display:none"><span>VAT 7%</span><span id="vatVal">0.00 บาท</span></div>
-            <div class="total-row total-grand"><span>ยอดรวมทั้งสิ้น</span><span id="grandVal">0.00 บาท</span></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- หมายเหตุ -->
-      <div class="card">
-        <div class="card-head"><div class="card-title">📝 หมายเหตุ</div></div>
-        <div class="card-body"><div class="field"><textarea id="note" rows="3" placeholder="เงื่อนไขการชำระเงิน, หมายเหตุพิเศษ..."></textarea></div></div>
-      </div>
-
-      <div class="form-actions" id="formActions">
-        <button class="btn btn-primary" id="btnGen" onclick="generate()"><span>📄</span> สร้าง PDF</button>
+        <button class="btn btn-primary" onclick="saveProfile()">💾 บันทึกข้อมูล</button>
+        <div style="font-size:12px;text-align:center;min-height:18px;color:var(--muted);margin-top:8px" id="profileSaveStatus"></div>
       </div>
     </div>
 
-    <!-- Preview -->
-    <div class="preview-col">
-      <div class="card">
-        <div class="card-head"><div class="card-title">👁 ตัวอย่าง</div></div>
-        <div class="card-body" style="padding:12px">
-          <div class="preview-doc">
-            <div class="prev-hdr">
-              <div><div class="prev-co" id="pv-co">ชื่อบริษัท</div><div class="prev-addr" id="pv-addr">ที่อยู่</div></div>
-              <div class="prev-badge"><div class="prev-type" id="pv-type">QUOTATION</div><div class="prev-no" id="pv-no">QT2026-0001</div><div class="prev-date" id="pv-date">วันที่ —</div></div>
-            </div>
-            <div class="prev-title" id="pv-title">ใบเสนอราคา</div>
-            <div class="preview-line" style="width:62%"></div>
-            <div class="preview-line" style="width:80%"></div>
-            <div class="preview-line" style="width:70%"></div>
-            <div class="prev-table">
-              <div class="prev-tr"><span>รายการ</span><span style="text-align:right">รวม</span></div>
-              <div id="pv-items"><div class="prev-tr" style="color:#aaa;font-size:10px"><span>ยังไม่มีรายการ</span><span></span></div></div>
-            </div>
-            <div class="prev-total" id="pv-total">฿ 0.00</div>
-          </div>
-          <p class="preview-tip">ตัวอย่างแสดงโครงสร้างเท่านั้น<br/>PDF จริงจะมีรูปแบบสมบูรณ์กว่า</p>
+    <!-- สรุปเดือนนี้ -->
+    <div class="summary-strip">
+      <div class="summary-box" style="background:#A8E6CF"><div class="label">รายรับ</div><div class="val" id="sumIncome">0</div></div>
+      <div class="summary-box" style="background:#FFD3B6"><div class="label">รายจ่าย</div><div class="val" id="sumExpense">0</div></div>
+      <div class="summary-box" style="background:var(--accent)"><div class="label">คงเหลือ</div><div class="val" id="sumNet">0</div></div>
+    </div>
+
+    <!-- บันทึกรายการ -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">✏️ บันทึกรายการวันนี้</div>
+        <span class="card-badge" style="background:#A8E6CF">รายรับ-รายจ่าย</span>
+      </div>
+      <div class="card-body">
+        <div class="grid2">
+          <div class="field col2"><label>วันที่<span class="req">*</span></label><input type="date" id="tx_date"/></div>
+          <div class="field col2"><label>รายการ<span class="req">*</span></label><input id="tx_desc" placeholder="เช่น ขายสินค้า, ค่าเช่า, ซื้อวัตถุดิบ"/></div>
+          <div class="field"><label>รายรับ (บาท)</label><input type="number" id="tx_income" value="0" min="0"/></div>
+          <div class="field"><label>รายจ่าย - ซื้อสินค้า (บาท)</label><input type="number" id="tx_goods" value="0" min="0"/></div>
+          <div class="field col2"><label>รายจ่าย - อื่นๆ (บาท)</label><input type="number" id="tx_other" value="0" min="0"/></div>
+          <div class="field col2"><label>หมายเหตุ</label><input id="tx_remarks" placeholder="เพิ่มเติม (ถ้ามี)"/></div>
         </div>
+        <button class="btn btn-accent" onclick="saveTransaction()">✨ บันทึกรายการ</button>
       </div>
     </div>
+
+    <!-- รายการล่าสุด -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">📋 รายการล่าสุด</div>
+        <span class="card-badge" style="background:#A5E4FF">10 รายการ</span>
+      </div>
+      <div class="card-body" id="txList">
+        <div style="font-size:12px;color:var(--muted);text-align:center;padding:12px">กำลังโหลดรายการค่ะ...</div>
+      </div>
+    </div>
+
+    <!-- สร้างรายงาน -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">📄 สร้างรายงาน PDF</div>
+        <span class="card-badge" style="background:#FFB199">รายงาน</span>
+      </div>
+      <div class="card-body">
+        <div class="grid2">
+          <div class="field"><label>จากวันที่</label><input type="date" id="report_start"/></div>
+          <div class="field"><label>ถึงวันที่</label><input type="date" id="report_end"/></div>
+        </div>
+        <button class="btn btn-pink" onclick="generateReport()">🧾 สร้างรายงาน PDF</button>
+      </div>
+    </div>
+
+    <!-- Success -->
+    <div class="success-card" id="successCard">
+      <div class="success-icon">🎉</div>
+      <h3>สร้างรายงานสำเร็จค่ะ!</h3>
+      <p>บันทึกลง Google Drive เรียบร้อยแล้ว</p>
+      <a id="pdfBtn" href="#" target="_blank" class="pdf-btn">📄 เปิด PDF</a>
+      <br/><br/>
+      <button class="btn btn-sky" onclick="shareReport()">📤 ส่งให้ลูกค้า/ทีมทาง LINE</button>
+    </div>
+
   </main>
-</div><!-- /appScreen -->
+</div>
 
 <script>
-// ── Config ────────────────────────────────────────────────────
-const LIFF_ID='2010618788-8xUdkoqR';
-// TODO: paste your Apps Script Web App /exec URL here (Deploy > Manage deployments)
-const GAS_URL='https://script.google.com/macros/s/AKfycbxBbsLZWyKmbRfY_4FMWLjkkfPtFjxWmtK8pg6VRv4SqUztp5fGaR1vcDdqZeLNz6VM/exec';
+const LIFF_ID = '2010618788-8xUdkoqR';
+// TODO: paste your Apps Script Web App /exec URL here — the SAME one used
+// in App.html's GAS_URL (this page reuses the same backend + profile data).
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxBbsLZWyKmbRfY_4FMWLjkkfPtFjxWmtK8pg6VRv4SqUztp5fGaR1vcDdqZeLNz6VM/exec';
 
-// Calls the Apps Script backend as a plain HTTP API instead of google.script.run
-// (google.script.run only works when the page itself is served by Apps Script).
-// Uses text/plain content-type to avoid a CORS preflight (OPTIONS) request,
-// which Apps Script Web Apps do not handle.
-function callServer(action,payload){
-  return fetch(GAS_URL,{
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({action:action,payload:payload||{}})
+let currentLineAuth = null;
+let currentUser = null;
+let lastReport = null; // { pdfUrl, fileName }
+
+function callServer(action, payload){
+  return fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: action, payload: payload || {} })
   }).then(function(res){
-    if(!res.ok) throw new Error('HTTP '+res.status);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
     return res.json();
   });
 }
-const DOC_TYPES=[
-  {id:'quotation',name:'ใบเสนอราคา',    badge:'QT', color:'#C9EF3E',prefix:'QT', extraLabel:'วันหมดอายุ',           extraKey:'expireDate',  receiverTitle:'ข้อมูลลูกค้า',        receiverLabel:'ชื่อลูกค้า / บริษัท',isPO:false,showPayment:false},
-  {id:'invoice',  name:'ใบแจ้งหนี้',    badge:'INV',color:'#A8E6CF',prefix:'INV',extraLabel:'วันครบกำหนดชำระ',      extraKey:'dueDate',     receiverTitle:'ข้อมูลลูกค้า',        receiverLabel:'ชื่อลูกค้า / บริษัท',isPO:false,showPayment:false},
-  {id:'po',       name:'ใบสั่งซื้อ',    badge:'PO', color:'#FFE08A',prefix:'PO', extraLabel:'วันที่ต้องการสินค้า',   extraKey:'requiredDate',receiverTitle:'ข้อมูลผู้ขาย (Vendor)',receiverLabel:'ชื่อผู้ขาย / Vendor',isPO:true, showPayment:false},
-  {id:'receipt',  name:'ใบเสร็จรับเงิน',badge:'REC',color:'#B8F0D8',prefix:'REC',extraLabel:'วันที่รับชำระ',         extraKey:'dueDate',     receiverTitle:'ข้อมูลผู้ชำระเงิน',   receiverLabel:'ชื่อผู้ชำระ',        isPO:false,showPayment:true},
-  {id:'delivery', name:'ใบส่งของ',      badge:'DN', color:'#FFD4A3',prefix:'DN', extraLabel:'วันที่จัดส่ง',          extraKey:'deliveryDate',receiverTitle:'ข้อมูลผู้รับสินค้า',  receiverLabel:'ชื่อผู้รับสินค้า',   isPO:false,showPayment:false},
-  {id:'billing',  name:'ใบวางบิล',      badge:'BL', color:'#FFC0C0',prefix:'BL', extraLabel:'วันครบกำหนดชำระ',      extraKey:'dueDate',     receiverTitle:'ข้อมูลลูกค้า',        receiverLabel:'ชื่อลูกค้า / บริษัท',isPO:false,showPayment:false},
-];
 
-let currentType=DOC_TYPES[0];
-let rowCount=0;
-let currentUser=null;
-let companyProfile=null;
-let currentLineAuth=null;
-
-// ── Auth ──────────────────────────────────────────────────────
-async function checkAuth(){
-  document.getElementById('loginMsg').textContent='';
-  showOverlay(true,'กำลังเข้าสู่ระบบ LINE','กรุณารอสักครู่');
-  try{
-    if(!window.liff) throw new Error('โหลด LIFF SDK ไม่สำเร็จ');
-    await liff.init({liffId:LIFF_ID});
-    if(!liff.isLoggedIn()){
-      liff.login({redirectUri:location.href});
-      return;
-    }
-    const profile=await liff.getProfile();
-    const idToken=liff.getIDToken();
-    if(!idToken) throw new Error('ไม่พบ LINE ID token กรุณาตรวจสอบ scope openid ใน LIFF');
-    currentLineAuth={
-      idToken:idToken,
-      lineUserId:profile.userId,
-      displayName:profile.displayName,
-      pictureUrl:profile.pictureUrl || ''
-    };
-  }catch(e){
-    showOverlay(false);
-    document.getElementById('loadingScreen').style.display='none';
-    document.getElementById('loginScreen').style.display='flex';
-    document.getElementById('loginMsg').textContent='เข้าสู่ระบบ LINE ไม่สำเร็จ: '+(e.message||e);
-    return;
-  }
-
-  callServer('getCurrentUser',{lineAuth:currentLineAuth})
-    .then(function(user){
-      showOverlay(false);
-      document.getElementById('loadingScreen').style.display='none';
-      if(user.loggedIn){
-        currentUser=user;
-        initApp();
-      } else {
-        document.getElementById('loginScreen').style.display='flex';
-        document.getElementById('loginMsg').textContent=user.error||'กรุณาเข้าสู่ระบบผ่าน LINE LIFF';
-      }
-    })
-    .catch(function(e){
-      showOverlay(false);
-      document.getElementById('loadingScreen').style.display='none';
-      document.getElementById('loginScreen').style.display='flex';
-      document.getElementById('loginMsg').textContent='เกิดข้อผิดพลาด: '+e.message;
-    });
+function showOverlay(show, title, sub){
+  document.getElementById('overlay').classList.toggle('show', show);
+  if(title) document.getElementById('overlayTitle').textContent = title;
+  if(sub) document.getElementById('overlaySub').textContent = sub;
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 3000);
 }
 
-function initApp(){
-  document.getElementById('loadingScreen').style.display='none';
-  document.getElementById('loginScreen').style.display='none';
-  document.getElementById('appScreen').style.display='block';
-  // Update user UI
-  const initial=(currentUser.name||'U')[0].toUpperCase();
-  const email=currentUser.displayName||currentUser.name||currentUser.lineUserId||'LINE User';
-  document.getElementById('topAvatar').textContent=initial;
-  document.getElementById('topEmail').textContent=email;
-  document.getElementById('drawerAvatar').textContent=initial;
-  document.getElementById('drawerName').textContent=currentUser.name||email;
-  document.getElementById('drawerEmail').textContent=email;
-  // Load profile
-  loadProfile();
-  // Load saved customers (for autocomplete + autofill)
-  loadCustomers();
-  // Build tabs
-  buildTabs();
-  // Deep link: if the chat button/LIFF URL included ?type=po (etc.), jump straight to that tab
-  const requestedType=getRequestedDocType_();
-  if(requestedType) switchType(requestedType);
-  // Init form
-  initDates();
-  addRow();
-  updatePreview();
-}
-
-// Reads ?type=xxx from the URL LIFF was opened with, so a chat menu button
-// can deep-link straight into the matching document tab (no double selection).
-function getRequestedDocType_(){
-  try{
-    const params=new URLSearchParams(location.search);
-    const id=params.get('type');
-    if(!id) return null;
-    return DOC_TYPES.find(function(dt){return dt.id===id;}) || null;
-  }catch(e){ return null; }
-}
-
-function logout(){
-  if(confirm('ออกจากระบบ?')){
-    if(window.liff&&liff.isLoggedIn()) liff.logout();
-    location.reload();
-  }
-}
-
-// ── Profile ───────────────────────────────────────────────────
-function loadProfile(){
-  callServer('getCompanyProfile',{lineAuth:currentLineAuth})
-    .then(function(profile){
-      if(profile){
-        companyProfile=profile;
-        fillFromProfile();
-        // Fill drawer
-        setV('p_companyName',   profile.companyName);
-        setV('p_companyAddress',profile.companyAddress);
-        setV('p_companyTaxId',  profile.companyTaxId);
-        setV('p_companyBranch', profile.companyBranch);
-        setV('p_companyPhone',  profile.companyPhone);
-        setV('p_companyEmail',  profile.companyEmail);
-      }
-    })
-    .catch(function(){});
-}
-
-// ── Customer memory ─────────────────────────────────────────
-// Lets the business owner pick a previously-used customer/vendor name
-// instead of retyping address/tax ID/phone every time. The actual saving
-// happens server-side (in generatePDF) whenever a document is created —
-// nothing extra to do here besides showing suggestions + autofilling.
-let customersMap = {};
-
-function loadCustomers(){
-  callServer('getCustomers',{lineAuth:currentLineAuth})
-    .then(function(list){
-      customersMap = {};
-      const dl = document.getElementById('customerDatalist');
-      dl.innerHTML = '';
-      (list || []).forEach(function(c){
-        customersMap[c.name] = c;
-        const opt = document.createElement('option');
-        opt.value = c.name;
-        dl.appendChild(opt);
-      });
-    })
-    .catch(function(){});
-}
-
-// Fires when the user picks a suggestion (or types a name that matches one
-// exactly and moves on) — fills in the rest of the fields automatically.
-document.getElementById('customerName').addEventListener('change', function(){
-  const match = customersMap[this.value];
-  if(match){
-    setV('customerAddress', match.address);
-    setV('customerTaxId',   match.taxId);
-    setV('customerBranch',  match.branch);
-    setV('customerPhone',   match.phone);
-    updatePreview();
-  }
+document.addEventListener('DOMContentLoaded', function(){
+  const today = new Date();
+  const iso = today.toISOString().slice(0,10);
+  document.getElementById('tx_date').value = iso;
+  document.getElementById('report_end').value = iso;
+  document.getElementById('report_start').value = iso.slice(0,8) + '01';
+  initLiff();
 });
 
-function fillFromProfile(){
-  const p=companyProfile;
-  if(!p) return;
-  setV('companyName',   p.companyName);
-  setV('companyAddress',p.companyAddress);
-  setV('companyTaxId',  p.companyTaxId);
-  setV('companyBranch', p.companyBranch);
-  setV('companyPhone',  p.companyPhone);
-  setV('companyEmail',  p.companyEmail);
-  updatePreview();
-  showToast('✅ โหลดข้อมูลบริษัทแล้ว');
+async function initLiff(){
+  try{
+    await liff.init({ liffId: LIFF_ID });
+    if(!liff.isLoggedIn()){
+      checkAuth();
+    } else {
+      currentLineAuth = { idToken: liff.getIDToken() };
+      afterLogin();
+    }
+  } catch(err){
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('loginMsg').textContent = 'เปิด LIFF ไม่สำเร็จค่ะ: ' + err.message;
+  }
+}
+
+function checkAuth(){
+  if(!liff.isLoggedIn()){
+    liff.login({ redirectUri: location.href });
+    return;
+  }
+  currentLineAuth = { idToken: liff.getIDToken() };
+  afterLogin();
+}
+
+async function afterLogin(){
+  try{
+    const profile = await liff.getProfile();
+    currentUser = profile;
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+    document.getElementById('topAvatar').textContent = (profile.displayName || 'U')[0].toUpperCase();
+    document.getElementById('topName').textContent = profile.displayName || 'LINE User';
+    loadProfile();
+    loadTransactions();
+  } catch(err){
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('loginMsg').textContent = 'โหลดโปรไฟล์ไม่สำเร็จค่ะ: ' + err.message;
+  }
+}
+
+// ── Shared company profile (same data as App.html) ─────────────
+function loadProfile(){
+  callServer('getCompanyProfile', { lineAuth: currentLineAuth })
+    .then(function(profile){
+      if(profile){
+        document.getElementById('p_companyName').value = profile.companyName || '';
+        document.getElementById('p_companyAddress').value = profile.companyAddress || '';
+        document.getElementById('p_companyTaxId').value = profile.companyTaxId || '';
+        document.getElementById('p_companyPhone').value = profile.companyPhone || '';
+      }
+    })
+    .catch(function(){});
 }
 
 function saveProfile(){
-  const profile={
-    companyName:   gv('p_companyName'),
-    companyAddress:gv('p_companyAddress'),
-    companyTaxId:  gv('p_companyTaxId'),
-    companyBranch: gv('p_companyBranch'),
-    companyPhone:  gv('p_companyPhone'),
-    companyEmail:  gv('p_companyEmail'),
+  const profile = {
+    companyName: document.getElementById('p_companyName').value.trim(),
+    companyAddress: document.getElementById('p_companyAddress').value.trim(),
+    companyTaxId: document.getElementById('p_companyTaxId').value.trim(),
+    companyPhone: document.getElementById('p_companyPhone').value.trim()
   };
-  if(!profile.companyName){showToast('⚠️ กรุณากรอกชื่อบริษัท');return;}
-  document.getElementById('saveStatus').textContent='กำลังบันทึก...';
-  callServer('saveCompanyProfile',{profile:profile,lineAuth:currentLineAuth})
+  if(!profile.companyName){ showToast('⚠️ กรุณากรอกชื่อก่อนนะคะ'); return; }
+  document.getElementById('profileSaveStatus').textContent = 'กำลังบันทึก...';
+  callServer('saveCompanyProfile', { profile: profile, lineAuth: currentLineAuth })
     .then(function(res){
-      if(res.success){
-        companyProfile=profile;
-        document.getElementById('saveStatus').textContent='✅ '+res.message;
-        setTimeout(function(){document.getElementById('saveStatus').textContent='';},3000);
-        loadHistory();
-      } else {
-        document.getElementById('saveStatus').textContent='❌ '+res.error;
-      }
+      document.getElementById('profileSaveStatus').textContent = res.success ? '✅ บันทึกแล้วค่ะ' : ('❌ ' + res.error);
+      setTimeout(function(){ document.getElementById('profileSaveStatus').textContent=''; }, 3000);
     })
-    .catch(function(e){
-      document.getElementById('saveStatus').textContent='❌ เกิดข้อผิดพลาด';
+    .catch(function(){
+      document.getElementById('profileSaveStatus').textContent = '❌ เกิดข้อผิดพลาดค่ะ';
     });
 }
 
-// ── History ───────────────────────────────────────────────────
-function loadHistory(){
-  callServer('getDocHistory',{docType:currentType.name,lineAuth:currentLineAuth})
-    .then(function(items){
-      const el=document.getElementById('historyList');
-      if(!items||items.length===0){
-        el.innerHTML='<div style="font-size:12px;color:var(--muted);text-align:center;padding:12px">ยังไม่มีเอกสาร</div>';
+// ── Transactions ─────────────────────────────────────────────
+function saveTransaction(){
+  const t = {
+    date: document.getElementById('tx_date').value,
+    itemDescription: document.getElementById('tx_desc').value.trim(),
+    income: parseFloat(document.getElementById('tx_income').value) || 0,
+    expenseGoods: parseFloat(document.getElementById('tx_goods').value) || 0,
+    expenseOther: parseFloat(document.getElementById('tx_other').value) || 0,
+    remarks: document.getElementById('tx_remarks').value.trim()
+  };
+  if(!t.date || !t.itemDescription){ showToast('⚠️ กรอกวันที่กับรายการก่อนนะคะ'); return; }
+
+  showOverlay(true, 'กำลังบันทึก', 'แป๊บเดียวค่ะ 🌸');
+  callServer('saveCashTransaction', { transaction: t, lineAuth: currentLineAuth })
+    .then(function(res){
+      showOverlay(false);
+      if(res.success){
+        showToast('✨ บันทึกรายการแล้วค่ะ');
+        document.getElementById('tx_desc').value = '';
+        document.getElementById('tx_income').value = '0';
+        document.getElementById('tx_goods').value = '0';
+        document.getElementById('tx_other').value = '0';
+        document.getElementById('tx_remarks').value = '';
+        loadTransactions();
+      } else {
+        showToast('❌ ' + res.error);
+      }
+    })
+    .catch(function(e){
+      showOverlay(false);
+      showToast('❌ ' + (e.message || e));
+    });
+}
+
+function loadTransactions(){
+  callServer('getCashTransactions', { lineAuth: currentLineAuth })
+    .then(function(res){
+      const el = document.getElementById('txList');
+      if(!res.success){
+        el.innerHTML = '<div style="font-size:12px;color:#c0392b;text-align:center;padding:12px">❌ ' + res.error + '</div>';
         return;
       }
-      el.innerHTML=items.map(function(item){
-        return '<div class="history-item" onclick="window.open(\''+escapeAttr(item.url)+'\',\'_blank\')">'
-          +'<div style="display:flex;justify-content:space-between;align-items:center">'
-          +'<div class="history-no">'+escapeHtml(item.docNo)+'</div>'
-          +'<div class="history-total">฿'+parseFloat(item.total||0).toLocaleString('th-TH')+'</div>'
-          +'</div>'
-          +'<div class="history-meta">'+escapeHtml(item.customer)+' · '+escapeHtml(item.docDate)+'</div>'
-          +'</div>';
+      const list = res.transactions || [];
+      let income=0, expense=0;
+      list.forEach(function(t){ income += t.income; expense += t.expenseGoods + t.expenseOther; });
+      document.getElementById('sumIncome').textContent = income.toLocaleString('th-TH');
+      document.getElementById('sumExpense').textContent = expense.toLocaleString('th-TH');
+      document.getElementById('sumNet').textContent = (income-expense).toLocaleString('th-TH');
+
+      if(list.length === 0){
+        el.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:12px">ยังไม่มีรายการเลยค่ะ ลองบันทึกอันแรกดูนะคะ 🌸</div>';
+        return;
+      }
+      el.innerHTML = list.slice(-10).reverse().map(function(t){
+        const expenseTotal = t.expenseGoods + t.expenseOther;
+        return '<div class="tx-item">'
+          + '<div class="tx-top">'
+          +   '<div><div class="tx-desc">' + escapeHtml(t.itemDescription) + '</div><div class="tx-date">' + escapeHtml(t.date) + '</div></div>'
+          +   '<div class="tx-amounts">'
+          +     (t.income>0 ? '<span class="tx-income">+' + t.income.toLocaleString('th-TH') + '</span>' : '')
+          +     (expenseTotal>0 ? '<span class="tx-expense">-' + expenseTotal.toLocaleString('th-TH') + '</span>' : '')
+          +   '</div>'
+          + '</div>'
+          + (t.remarks ? '<div class="tx-remarks">' + escapeHtml(t.remarks) + '</div>' : '')
+          + '</div>';
       }).join('');
     })
-    .catch(function(){});
+    .catch(function(){
+      document.getElementById('txList').innerHTML = '<div style="font-size:12px;color:#c0392b;text-align:center;padding:12px">โหลดรายการไม่สำเร็จค่ะ</div>';
+    });
 }
 
-// ── Profile drawer ────────────────────────────────────────────
-function openProfile(){
-  document.getElementById('profilePanel').classList.add('open');
-  loadHistory();
-}
-function closeProfile(){
-  document.getElementById('profilePanel').classList.remove('open');
-}
-function handlePanelClick(e){
-  if(e.target===document.getElementById('profilePanel')) closeProfile();
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
 }
 
-// ── Tabs ──────────────────────────────────────────────────────
-function buildTabs(){
-  const wrap=document.getElementById('docTabs');
-  wrap.innerHTML='';
-  DOC_TYPES.forEach(function(dt){
-    const btn=document.createElement('button');
-    btn.className='doc-tab'+(dt.id==='quotation'?' active':'');
-    btn.style.background=dt.id==='quotation'?dt.color:'#fff';
-    btn.textContent=dt.name;
-    btn.dataset.id=dt.id;
-    btn.onclick=function(){switchType(dt);};
-    wrap.appendChild(btn);
-  });
-}
+// ── Report ───────────────────────────────────────────────────
+function generateReport(){
+  const start = document.getElementById('report_start').value;
+  const end = document.getElementById('report_end').value;
+  if(!start || !end){ showToast('⚠️ เลือกช่วงวันที่ก่อนนะคะ'); return; }
 
-function switchType(dt){
-  currentType=dt;
-  document.querySelectorAll('.doc-tab').forEach(function(b){
-    const active=b.dataset.id===dt.id;
-    b.classList.toggle('active',active);
-    b.style.background=active?dt.color:'#fff';
-  });
-  document.getElementById('docCardTitle').textContent='📋 รายละเอียด'+dt.name;
-  document.getElementById('docCardBadge').textContent=dt.badge;
-  document.getElementById('docCardBadge').style.background=dt.color;
-  document.getElementById('extraDateLabel').textContent=dt.extraLabel;
-  document.getElementById('receiverCardTitle').textContent='👤 '+dt.receiverTitle;
-  document.getElementById('receiverNameLabel').innerHTML=dt.receiverLabel+'<span class="req">*</span>';
-  document.getElementById('paymentWrap').style.display=dt.showPayment?'':'none';
-  document.getElementById('customerName').placeholder=dt.isPO?'บริษัท ผู้ขาย จำกัด':'บริษัท ลูกค้า จำกัด';
-  const y=new Date().getFullYear();
-  const n=String(Math.floor(Math.random()*8999)+1001);
-  document.getElementById('docNo').value=dt.prefix+y+'-'+n;
-  updatePreview();
-}
-
-// ── Items ─────────────────────────────────────────────────────
-function addRow(name,qty,price,disc){
-  rowCount++;
-  const id=rowCount;
-  const row=document.createElement('div');
-  row.className='item-row';
-  row.id='row-'+id;
-  row.innerHTML=
-    '<input type="text" class="iname" placeholder="ชื่อสินค้า / บริการ" value="'+escapeAttr(name||'')+'" oninput="calcRender()"/>'
-    +'<input type="number" class="iqty num" value="'+(qty||1)+'" min="0" step="any" oninput="calcRender()"/>'
-    +'<input type="number" class="iprice num" value="'+(price||'')+'" min="0" step="any" placeholder="0.00" oninput="calcRender()"/>'
-    +'<input type="number" class="idisc num" value="'+(disc||'')+'" min="0" step="any" placeholder="0" oninput="calcRender()"/>'
-    +'<button class="btn-rm" onclick="removeRow('+id+')" title="ลบ">×</button>';
-  document.getElementById('itemsBody').appendChild(row);
-  calcRender();
-}
-
-function removeRow(id){
-  const el=document.getElementById('row-'+id);
-  if(el) el.remove();
-  calcRender();
-}
-
-function getItems(){
-  return Array.from(document.querySelectorAll('#itemsBody .item-row')).map(function(row){
-    return{
-      name:  row.querySelector('.iname').value,
-      qty:   parseFloat(row.querySelector('.iqty').value)||0,
-      price: parseFloat(row.querySelector('.iprice').value)||0,
-      discount:parseFloat(row.querySelector('.idisc').value)||0,
-    };
-  }).filter(function(i){return i.name.trim();});
-}
-
-// ── Calc ──────────────────────────────────────────────────────
-function getTotals(){
-  const items=getItems();
-  let sub=0;
-  items.forEach(function(i){sub+=(i.qty*i.price)-i.discount;});
-  const hasVat=document.getElementById('includeVat').checked;
-  const vat=hasVat?Math.round(sub*7)/100:0;
-  return{sub:sub,vat:vat,grand:sub+vat};
-}
-
-function calcRender(){
-  const t=getTotals();
-  const fmt=function(n){return n.toLocaleString('th-TH',{minimumFractionDigits:2});};
-  document.getElementById('subVal').textContent=fmt(t.sub)+' บาท';
-  document.getElementById('vatVal').textContent=fmt(t.vat)+' บาท';
-  document.getElementById('grandVal').textContent=fmt(t.grand)+' บาท';
-  document.getElementById('vatRow').style.display=document.getElementById('includeVat').checked?'':'none';
-  updatePreview();
-}
-
-// ── Preview ───────────────────────────────────────────────────
-function updatePreview(){
-  const t=getTotals();
-  document.getElementById('pv-co').textContent=gv('companyName')||'ชื่อบริษัท';
-  document.getElementById('pv-addr').textContent=gv('companyAddress')||'ที่อยู่';
-  document.getElementById('pv-type').textContent=currentType.name.toUpperCase();
-  document.getElementById('pv-no').textContent=gv('docNo')||currentType.prefix+'2026-0001';
-  document.getElementById('pv-date').textContent='วันที่ '+(gv('docDate')||'—');
-  document.getElementById('pv-title').textContent=currentType.name;
-  document.getElementById('pv-total').textContent='฿ '+t.grand.toLocaleString('th-TH',{minimumFractionDigits:2});
-  const items=getItems();
-  const pvEl=document.getElementById('pv-items');
-  if(!items.length){
-    pvEl.innerHTML='<div class="prev-tr" style="color:#aaa;font-size:10px"><span>ยังไม่มีรายการ</span><span></span></div>';
-  } else {
-    pvEl.innerHTML=items.slice(0,4).map(function(i){
-      const lt=(i.qty*i.price)-i.discount;
-      return '<div class="prev-tr"><span>'+escapeHtml(i.name)+'</span><span style="text-align:right">'+lt.toLocaleString('th-TH',{minimumFractionDigits:2})+'</span></div>';
-    }).join('')+(items.length>4?'<div class="prev-tr" style="color:#aaa;font-size:10px"><span>+ อีก '+(items.length-4)+' รายการ</span><span></span></div>':'');
-  }
-}
-
-// ── Collect & validate ────────────────────────────────────────
-function collectData(){
-  const d={
-    docTypeName:    currentType.name,
-    companyName:    gv('companyName'),
-    companyAddress: gv('companyAddress'),
-    companyTaxId:   gv('companyTaxId'),
-    companyBranch:  gv('companyBranch'),
-    companyPhone:   gv('companyPhone'),
-    companyEmail:   gv('companyEmail'),
-    docNo:          gv('docNo'),
-    docDate:        gv('docDate'),
-    contactPerson:  gv('contactPerson'),
-    customerName:   gv('customerName'),
-    customerAddress:gv('customerAddress'),
-    customerTaxId:  gv('customerTaxId'),
-    customerBranch: gv('customerBranch'),
-    customerPhone:  gv('customerPhone'),
-    note:           gv('note'),
-    includeVat:     document.getElementById('includeVat').checked,
-    paymentMethod:  gv('paymentMethod'),
-    items:          getItems(),
-  };
-  d[currentType.extraKey]=gv('extraDate');
-  if(currentType.isPO){
-    d.vendorName=d.customerName; d.vendorAddress=d.customerAddress;
-    d.vendorTaxId=d.customerTaxId; d.vendorBranch=d.customerBranch;
-    d.vendorPhone=d.customerPhone; d.customerName='';
-  }
-  return d;
-}
-
-function validate(d){
-  if(!d.companyName)  return 'กรุณากรอกชื่อบริษัทของคุณ';
-  if(!d.docNo)        return 'กรุณากรอกเลขที่เอกสาร';
-  if(!d.docDate)      return 'กรุณาเลือกวันที่ออกเอกสาร';
-  if(!d.customerName&&!d.vendorName) return 'กรุณากรอกชื่อลูกค้า / ผู้รับ';
-  if(!d.items.length) return 'กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ';
-  return null;
-}
-
-// ── Generate ──────────────────────────────────────────────────
-let lastGeneratedDoc = null; // { url, fileName, docTypeName, docNo, customerName }
-
-function generate(){
-  const data=collectData();
-  const err=validate(data);
-  if(err){showToast('⚠️ '+err);return;}
-  showOverlay(true,'กำลังสร้างเอกสาร','กรุณารอสักครู่ (5–20 วินาที)');
-  document.getElementById('btnGen').disabled=true;
-  callServer('generatePDF',{formData:data,lineAuth:currentLineAuth})
+  showOverlay(true, 'กำลังสร้างรายงาน', 'รอสักครู่นะคะ (5–15 วินาที) 🌸');
+  callServer('generateCashReportPDF', { reportData: { startDate: start, endDate: end }, lineAuth: currentLineAuth })
     .then(function(res){
       showOverlay(false);
-      document.getElementById('btnGen').disabled=false;
       if(res.success){
-        document.getElementById('pdfBtn').href=res.url;
+        lastReport = res;
+        document.getElementById('pdfBtn').href = res.pdfUrl;
         document.getElementById('successCard').classList.add('show');
         document.getElementById('successCard').scrollIntoView({behavior:'smooth'});
-        document.getElementById('formActions').style.display='none';
-        lastGeneratedDoc = {
-          url: res.url,
-          fileName: res.fileName,
-          docTypeName: data.docTypeName,
-          docNo: data.docNo,
-          customerName: data.customerName || data.vendorName || ''
-        };
+        showToast('🎉 สร้างรายงานสำเร็จแล้วค่ะ');
       } else {
-        showToast('❌ '+res.error);
+        showToast('❌ ' + res.error);
       }
     })
     .catch(function(e){
       showOverlay(false);
-      document.getElementById('btnGen').disabled=false;
-      showToast('❌ '+(e.message||e));
+      showToast('❌ ' + (e.message || e));
     });
 }
 
-// Opens LINE's native "share to chat" picker so the business owner can send
-// the PDF link straight to their customer's LINE chat (or a group) — no
-// copy-pasting needed. Requires the "chat_message.write" scope to be
-// enabled on the LIFF app (LINE Developers Console → LIFF → scopes).
-function shareToCustomer(){
-  if(!lastGeneratedDoc){ showToast('⚠️ ยังไม่มีเอกสารให้ส่ง'); return; }
-  if(typeof liff==='undefined' || !liff.isApiAvailable || !liff.isApiAvailable('shareTargetPicker')){
-    showToast('อุปกรณ์นี้ไม่รองรับการแชร์ผ่าน LINE โดยตรง ใช้ปุ่ม "เปิด PDF" แล้วคัดลอกลิงก์แทนได้ครับ');
+function shareReport(){
+  if(!lastReport){ showToast('⚠️ ยังไม่มีรายงานให้ส่งค่ะ'); return; }
+  if(typeof liff === 'undefined' || !liff.isApiAvailable || !liff.isApiAvailable('shareTargetPicker')){
+    showToast('อุปกรณ์นี้แชร์ตรงผ่าน LINE ไม่ได้ค่ะ ใช้ปุ่ม "เปิด PDF" แล้วคัดลอกลิงก์แทนได้นะคะ');
     return;
   }
-  const d = lastGeneratedDoc;
-  const text = (d.docTypeName||'เอกสาร') + ' ' + (d.docNo||'') +
-    (d.customerName ? ('\nสำหรับ: ' + d.customerName) : '') +
-    '\n\n' + d.url;
-  liff.shareTargetPicker([{ type: 'text', text: text }])
-    .then(function(res){
-      if(res){ showToast('✅ ส่งเอกสารแล้ว'); }
-      // res is null if the user closed the picker without sending — no error, just no-op.
-    })
-    .catch(function(e){
-      showToast('❌ ส่งไม่สำเร็จ: '+(e.message||e));
-    });
+  liff.shareTargetPicker([{ type: 'text', text: '🧾 รายงานเงินสดรับ-จ่าย\n' + lastReport.pdfUrl }])
+    .then(function(res){ if(res) showToast('✅ ส่งแล้วค่ะ'); })
+    .catch(function(e){ showToast('❌ ส่งไม่สำเร็จ: ' + (e.message || e)); });
 }
-
-function newDoc(){
-  document.getElementById('successCard').classList.remove('show');
-  document.getElementById('formActions').style.display='';
-  document.getElementById('customerName').value='';
-  document.getElementById('customerAddress').value='';
-  document.getElementById('customerTaxId').value='';
-  document.getElementById('customerBranch').value='';
-  document.getElementById('customerPhone').value='';
-  document.getElementById('note').value='';
-  document.getElementById('itemsBody').innerHTML='';
-  rowCount=0;
-  addRow();
-  switchType(currentType);
-  window.scrollTo({top:0,behavior:'smooth'});
-}
-
-// ── Helpers ───────────────────────────────────────────────────
-function gv(id){const el=document.getElementById(id);return el?el.value.trim():'';}
-function setV(id,val){const el=document.getElementById(id);if(el&&val)el.value=val;}
-function escapeHtml(value){
-  return String(value==null?'':value).replace(/[&<>"']/g,function(ch){
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
-  });
-}
-function escapeAttr(value){return escapeHtml(value).replace(/`/g,'&#96;');}
-function showOverlay(show,title,sub){
-  document.getElementById('overlay').classList.toggle('show',show);
-  if(title) document.getElementById('overlayTitle').textContent=title;
-  if(sub)   document.getElementById('overlaySub').textContent=sub;
-}
-let toastT;
-function showToast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.classList.add('show');
-  clearTimeout(toastT);
-  toastT=setTimeout(function(){el.classList.remove('show');},4000);
-}
-function initDates(){
-  const today=new Date();
-  const fmt30=new Date(today.getTime()+30*86400000);
-  const fmtD=function(d){return d.toISOString().split('T')[0];};
-  document.getElementById('docDate').value=fmtD(today);
-  document.getElementById('extraDate').value=fmtD(fmt30);
-  const y=today.getFullYear();
-  document.getElementById('docNo').value='QT'+y+'-'+String(Math.floor(Math.random()*8999)+1001);
-}
-
-// ── Init ──────────────────────────────────────────────────────
-window.onload=function(){
-  checkAuth();
-};
-
-document.addEventListener('input',function(e){
-  if(e.target.closest('#formArea')) calcRender();
-});
 </script>
 </body>
 </html>
