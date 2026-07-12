@@ -7,38 +7,48 @@ const SPREADSHEET_ID = '1ckKnGRcZS7RLu2qftr3WpdmDYSH4HR6oxioe3fTYH3g';
 const LINE_LOGIN_CHANNEL_ID = '2010618788';
 
 // ── Packages ──────────────────────────────────────────────────
-// Payment collection is NOT automated yet — admin assigns/renews paid
+// Priced for the actual target segment: ตลาดนัด / แม่ค้า-พ่อค้าออนไลน์รายย่อย
+// (mass-market micro-merchants), not SME/business buyers — keep these low
+// until there's a separate SME-tier product.
+// Payment collection is NOT automated yet — admin assigns/renews PAID
 // packages manually by editing the "Subscriptions" sheet (LINE User ID +
-// Package + Expiry Date). Every LINE account that ever touches the app
-// (LIFF login or bot chat) is auto-enrolled in the "free" trial the first
-// time we see them — see getOrCreateSubscriptionRow_ — so there's no more
-// "no package yet" dead end. The free trial is a LIFETIME cap (not
-// monthly): FREE_TRIAL_LIMIT total document generations, tracked in the
-// "Total Usage Count" column, then generatePDF returns upgradeRequired:true
-// so the frontend can show the "please subscribe" popup.
-const FREE_TRIAL_LIMIT = 50;
-
+// Package + Expiry Date). The "free" package below IS automated: it's
+// auto-assigned the first time a new LINE user is seen (see
+// getUserSubscription_), so nobody hits a dead-end "no_package" error on
+// their very first try — that's the whole point of a free tier for
+// acquisition with zero ad budget.
 const PACKAGES = {
   free: {
     id: 'free', name: 'ทดลองใช้ฟรี', price: 0,
-    quotaPerMonth: null, hasAI: false, hasTax: false, isTrial: true
+    quotaPerMonth: 5, hasAI: false, hasTax: false
   },
-  trial99: {
-    id: 'trial99', name: 'แพ็คเริ่มต้น', price: 99,
-    quotaPerMonth: 30, hasAI: false, hasTax: false, trialDays: 7
+  starter59: {
+    id: 'starter59', name: 'แพ็คเริ่มต้น', price: 59,
+    quotaPerMonth: 30, hasAI: false, hasTax: false
   },
-  pro299: {
-    id: 'pro299', name: 'แพ็ค 299', price: 299,
+  pro149: {
+    id: 'pro149', name: 'แพ็คโปร', price: 149,
     quotaPerMonth: null, hasAI: false, hasTax: false
   },
-  premium990: {
-    id: 'premium990', name: 'แพ็ค 990', price: 990,
+  premium249: {
+    id: 'premium249', name: 'แพ็คพรีเมียม', price: 249,
     quotaPerMonth: null, hasAI: true, hasTax: true
   }
 };
+// Backward-compat aliases: rows already sitting in the live "Subscriptions"
+// sheet from before this pricing update still say "trial99"/"pro299"/
+// "premium990" in the Package column. Without these aliases, PACKAGES[id]
+// would come back undefined for every one of those existing customers the
+// moment this file is deployed, and getUserSubscription_ would treat a
+// paying customer as having no package at all. Point the old ids at the
+// same objects as their renamed replacements so nobody has to go hand-edit
+// the sheet before this ships.
+PACKAGES.trial99    = PACKAGES.starter59;
+PACKAGES.pro299     = PACKAGES.pro149;
+PACKAGES.premium990 = PACKAGES.premium249;
 
 function getSubscriptionSheet_(ss) {
-  const headers = ['LINE User ID', 'Package', 'Start Date', 'Expiry Date', 'Usage Month', 'Usage Count', 'Last Updated', 'Total Usage Count'];
+  const headers = ['LINE User ID', 'Package', 'Start Date', 'Expiry Date', 'Usage Month', 'Usage Count', 'Last Updated'];
   let sheet = ss.getSheetByName('Subscriptions');
   if (!sheet) {
     sheet = ss.insertSheet('Subscriptions');
@@ -46,13 +56,6 @@ function getSubscriptionSheet_(ss) {
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#f0f0f0');
-  } else if (sheet.getLastColumn() < headers.length) {
-    // Older sheets predate the "Total Usage Count" column (added for the
-    // lifetime free-trial cap) — backfill just the missing header(s).
-    const startCol = sheet.getLastColumn() + 1;
-    sheet.getRange(1, startCol, 1, headers.length - startCol + 1)
-      .setValues([headers.slice(startCol - 1)])
-      .setFontWeight('bold').setBackground('#f0f0f0');
   }
   return sheet;
 }
@@ -65,82 +68,85 @@ function findSubscriptionRow_(sheet, lineUserId) {
   return null;
 }
 
-// Every LINE account gets a row the first time we see them (LIFF login or
-// bot chat) — auto-enrolled in the "free" trial. This is what makes "new
-// customer, no row yet" no longer a dead end: they get FREE_TRIAL_LIMIT
-// free document generations before anything blocks them.
-function getOrCreateSubscriptionRow_(sheet, lineUserId) {
-  const found = findSubscriptionRow_(sheet, lineUserId);
-  if (found) return found;
-  const now = new Date();
-  // [LINE User ID, Package, Start Date, Expiry Date, Usage Month, Usage Count, Last Updated, Total Usage Count]
-  sheet.appendRow([lineUserId, 'free', now, '', '', 0, now, 0]);
-  return { rowIndex: sheet.getLastRow(), row: [lineUserId, 'free', now, '', '', 0, now, 0] };
-}
-
-// Always returns a subscription (never null) — new/unknown users are
-// auto-enrolled in the free trial by getOrCreateSubscriptionRow_. A paid
-// package that has expired falls back to the free trial's lifetime count
-// rather than blocking outright, so the behavior is consistent everywhere:
-// "50 free lifetime uses, then a popup to subscribe/renew."
+// Returns null if the user has no package or it (a PAID package) has expired.
+// A brand-new LINE user (no row at all) is auto-enrolled into the "free"
+// package on the spot — see createFreeTrialRow_ — instead of returning null,
+// so the very first thing a new user does isn't hitting a paywall error.
 function getUserSubscription_(lineUserId) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = getSubscriptionSheet_(ss);
-  const found = getOrCreateSubscriptionRow_(sheet, lineUserId);
+  let found = findSubscriptionRow_(sheet, lineUserId);
+  if (!found) {
+    found = createFreeTrialRow_(sheet, lineUserId);
+  }
 
-  const packageId       = found.row[1];
-  const expiryDate      = found.row[3];
-  const usageMonth      = found.row[4];
-  const usageCount      = found.row[5];
-  const totalUsageCount = Number(found.row[7] || 0);
+  const packageId  = found.row[1];
+  const expiryDate = found.row[3];
+  const usageMonth = found.row[4];
+  const usageCount = found.row[5];
 
-  const pkg = PACKAGES[packageId] || PACKAGES.free;
-  const expired = pkg.id !== 'free' && expiryDate && new Date(expiryDate) < new Date();
-
-  if (pkg.id === 'free' || expired) {
-    return {
-      pkg: PACKAGES.free,
-      rowIndex: found.rowIndex,
-      usageCount: totalUsageCount,
-      usageMonth: null,
-      totalUsageCount: totalUsageCount
-    };
+  const pkg = PACKAGES[packageId];
+  if (!pkg) return null; // unknown/typo'd package id in the sheet — treat as no package
+  // Only PAID packages expire on a date; the free tier has no expiry date
+  // and is instead capped purely by its monthly quota.
+  if (packageId !== 'free' && expiryDate && new Date(expiryDate) < new Date()) {
+    return { pkg: pkg, rowIndex: found.rowIndex, usageCount: 0, usageMonth: null, expired: true };
   }
 
   const currentMonthKey = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM');
   const count = (usageMonth === currentMonthKey) ? Number(usageCount || 0) : 0;
 
-  return { pkg: pkg, rowIndex: found.rowIndex, usageCount: count, usageMonth: currentMonthKey, totalUsageCount: totalUsageCount };
+  return { pkg: pkg, rowIndex: found.rowIndex, usageCount: count, usageMonth: currentMonthKey };
 }
 
-// Checks quota and, if allowed, increments usage.
+// Appends a new "free" package row for a LINE user we've never seen before.
+// Runs once per user, right when they first authenticate or try to
+// generate a document — no admin action required.
+// Wrapped in a script lock: getUserSubscription_ is called both from
+// getCurrentUser (on page load) and generatePDF (on submit), and those can
+// land close together (two tabs, a fast double-tap). Without the lock, both
+// could see "no row yet" and each append their own row for the same user —
+// a silent duplicate that leaves stray rows in the sheet.
+function createFreeTrialRow_(sheet, lineUserId) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const existing = findSubscriptionRow_(sheet, lineUserId);
+    if (existing) return existing; // another request just created it — reuse it
+    const now = new Date();
+    const monthKey = Utilities.formatDate(now, 'Asia/Bangkok', 'yyyy-MM');
+    const row = [lineUserId, 'free', now, '', monthKey, 0, now];
+    sheet.appendRow(row);
+    return { rowIndex: sheet.getLastRow(), row: row };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Checks quota and, if allowed, increments usage for this month.
 // Call this right before generating a document.
 function checkAndConsumeQuota_(lineUserId) {
   const sub = getUserSubscription_(lineUserId);
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = getSubscriptionSheet_(ss);
-
-  if (sub.pkg.id === 'free') {
-    if (sub.totalUsageCount >= FREE_TRIAL_LIMIT) {
-      return { allowed: false, reason: 'trial_exceeded', pkg: sub.pkg, trialLimit: FREE_TRIAL_LIMIT };
-    }
-    sheet.getRange(sub.rowIndex, 7).setValue(new Date());               // Last Updated
-    sheet.getRange(sub.rowIndex, 8).setValue(sub.totalUsageCount + 1);  // Total Usage Count
+  // Only reachable if the sheet has a genuinely unknown/typo'd package id
+  // (free tier auto-enrolls every user — see getUserSubscription_).
+  if (!sub) {
+    return { allowed: false, reason: 'no_package' };
+  }
+  if (sub.expired) {
+    return { allowed: false, reason: 'expired', pkg: sub.pkg };
+  }
+  if (sub.pkg.quotaPerMonth !== null && sub.usageCount >= sub.pkg.quotaPerMonth) {
     return {
-      allowed: true,
-      pkg: sub.pkg,
-      remaining: FREE_TRIAL_LIMIT - sub.totalUsageCount - 1,
-      trialLimit: FREE_TRIAL_LIMIT
+      allowed: false,
+      reason: (sub.pkg.id === 'free') ? 'free_quota_exceeded' : 'quota_exceeded',
+      pkg: sub.pkg
     };
   }
-
-  if (sub.pkg.quotaPerMonth !== null && sub.usageCount >= sub.pkg.quotaPerMonth) {
-    return { allowed: false, reason: 'quota_exceeded', pkg: sub.pkg };
-  }
-  sheet.getRange(sub.rowIndex, 5).setValue(sub.usageMonth);              // Usage Month
-  sheet.getRange(sub.rowIndex, 6).setValue(sub.usageCount + 1);          // Usage Count
-  sheet.getRange(sub.rowIndex, 7).setValue(new Date());                  // Last Updated
-  sheet.getRange(sub.rowIndex, 8).setValue(sub.totalUsageCount + 1);     // Total Usage Count (lifetime, for reporting)
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = getSubscriptionSheet_(ss);
+  sheet.getRange(sub.rowIndex, 5).setValue(sub.usageMonth);      // Usage Month
+  sheet.getRange(sub.rowIndex, 6).setValue(sub.usageCount + 1);  // Usage Count
+  sheet.getRange(sub.rowIndex, 7).setValue(new Date());          // Last Updated
   return {
     allowed: true,
     pkg: sub.pkg,
@@ -209,10 +215,7 @@ function doPost(e) {
 function getCurrentUser(lineAuth) {
   try {
     const user = verifyLineUser_(lineAuth);
-    // Auto-enrolls the account in the free trial on first sight — every
-    // logged-in user now always has a package (never null).
     const sub = getUserSubscription_(user.lineUserId);
-    const isTrial = sub.pkg.id === 'free';
     return {
       loggedIn: true,
       userKey: user.userKey,
@@ -221,17 +224,15 @@ function getCurrentUser(lineAuth) {
       displayName: user.name,
       pictureUrl: user.pictureUrl,
       email: user.email || '',
-      package: {
+      package: sub ? {
         id: sub.pkg.id,
         name: sub.pkg.name,
-        // For the free trial, quota/usage are lifetime totals (not
-        // monthly) — reuses the same "X/Y ครั้ง" badge shape as paid plans.
-        quotaPerMonth: isTrial ? FREE_TRIAL_LIMIT : sub.pkg.quotaPerMonth,
-        usageCount: isTrial ? sub.totalUsageCount : sub.usageCount,
+        quotaPerMonth: sub.pkg.quotaPerMonth,
+        usageCount: sub.usageCount,
         hasAI: sub.pkg.hasAI,
         hasTax: sub.pkg.hasTax,
-        isTrial: isTrial
-      }
+        expired: !!sub.expired
+      } : null
     };
   } catch(e) {
     console.log('getCurrentUser error:', e);
@@ -420,7 +421,7 @@ function saveCustomerFromDoc_(ownerLineUserId, name, address, taxId, branch, pho
   sheet.appendRow([ownerLineUserId, name, address, taxId, branch, phone, new Date()]);
 }
 
-// ── Accounting: cash income/expense log (package 990 preview) ──────────
+// ── Accounting: cash income/expense log (premium249 preview) ──────────
 // Scoped per business owner (LINE User ID). Reuses the same company
 // profile (getCompanyProfile/saveCompanyProfile) as the main document app
 // for the report header, so nothing needs to be entered twice.
@@ -437,9 +438,22 @@ function getCashTransactionSheet_(ss) {
   return sheet;
 }
 
+// Shared gate for the three accounting endpoints below — this feature is
+// advertised (see buildTaxFeatureMessage_) as premium249-only, but until now
+// nothing actually enforced that server-side, so anyone who knew the Apps
+// Script URL could call these three actions directly and use the "paid"
+// feature for free regardless of package.
+function requireTaxAccess_(lineUserId) {
+  const sub = getUserSubscription_(lineUserId);
+  if (!sub || sub.expired || !sub.pkg.hasTax) {
+    throw new Error('ฟีเจอร์นี้อยู่ในแพ็คพรีเมียม 249 บาท/เดือนเท่านั้นค่ะ พิมพ์ "แพ็กเกจ" ในแชท LINE เพื่อดูรายละเอียดและอัปเกรดได้เลยนะคะ');
+  }
+}
+
 function getCashTransactions(lineAuth) {
   try {
     const user = verifyLineUser_(lineAuth);
+    requireTaxAccess_(user.lineUserId);
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = getCashTransactionSheet_(ss);
     const data = sheet.getDataRange().getValues();
@@ -497,6 +511,7 @@ function importReceiptAsIncome_(lineUserId, formData) {
 function saveCashTransaction(transaction, lineAuth) {
   try {
     const user = verifyLineUser_(lineAuth);
+    requireTaxAccess_(user.lineUserId);
     if (!transaction || !transaction.date || !transaction.itemDescription) {
       throw new Error('กรุณากรอกวันที่และรายการให้ครบถ้วนค่ะ');
     }
@@ -528,6 +543,7 @@ function generateCashReportPDF(reportData, lineAuth) {
   let tmpFile = null;
   try {
     const user = verifyLineUser_(lineAuth);
+    requireTaxAccess_(user.lineUserId);
     if (!reportData || !reportData.startDate || !reportData.endDate) {
       throw new Error('กรุณาเลือกช่วงวันที่สำหรับรายงานค่ะ');
     }
@@ -626,19 +642,34 @@ function generatePDF(formData, lineAuth) {
 
     const quota = checkAndConsumeQuota_(user.lineUserId);
     if (!quota.allowed) {
-      // upgradeRequired:true tells the frontend to show the "subscribe"
-      // popup instead of a plain error toast.
-      if (quota.reason === 'trial_exceeded') {
+      // Return here (instead of throw) so we can attach upgradeRequired:true —
+      // the frontend's nicer upgrade modal only shows when that flag is set;
+      // a thrown Error would fall through to a plain error toast instead.
+      if (quota.reason === 'no_package') {
         return {
           success: false,
           upgradeRequired: true,
-          error: 'คุณใช้งานฟรีครบ ' + quota.trialLimit + ' ครั้งแล้ว กรุณาสมัครแพ็กเกจเพื่อใช้งานต่อค่ะ 🙏'
+          error: 'บัญชีนี้ยังไม่มีแพ็กเกจที่ใช้งานได้ กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง หรือทักแอดมิน'
+        };
+      }
+      if (quota.reason === 'expired') {
+        return {
+          success: false,
+          upgradeRequired: true,
+          error: 'แพ็ก "' + quota.pkg.name + '" ของคุณหมดอายุแล้ว กรุณาต่ออายุเพื่อใช้งานต่อค่ะ (ทักแอดมินได้เลยนะคะ)'
+        };
+      }
+      if (quota.reason === 'free_quota_exceeded') {
+        return {
+          success: false,
+          upgradeRequired: true,
+          error: 'ใช้งานฟรีครบ ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนแล้ว สมัครแพ็กเริ่มต้นเพียง 59 บาท/เดือน เพื่อใช้งานต่อได้เลยค่ะ'
         };
       }
       return {
         success: false,
         upgradeRequired: true,
-        error: 'ใช้งานครบโควตา ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนของแพ็ก "' + quota.pkg.name + '" แล้ว กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานต่อค่ะ'
+        error: 'ใช้งานครบโควตา ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนของแพ็ก "' + quota.pkg.name + '" แล้ว กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานต่อ'
       };
     }
 
@@ -793,6 +824,11 @@ function numberToThaiText(amount) {
       if (d === 0) continue;
       if (i === 1 && d === 1) r = 'สิบ' + r;
       else if (i === 1 && d === 2) r = 'ยี่สิบ' + r;
+      // Thai reading rule: the units digit "1" is read as "เอ็ด" (not
+      // "หนึ่ง") whenever there's a tens digit or higher in the same group
+      // — e.g. 11="สิบเอ็ด", 21="ยี่สิบเอ็ด", 101="หนึ่งร้อยเอ็ด".
+      // Only a bare "1" with nothing else in the group stays "หนึ่ง".
+      else if (i === 0 && d === 1 && s.length > 1) r = 'เอ็ด' + r;
       else r = ones[d] + digits[i] + r;
     }
     return r;
@@ -1020,13 +1056,13 @@ function isTaxFeatureQuery_(text) {
 
 function buildPackageInfoMessage_() {
   return '📦 แพ็กเกจของ ง่าย ผู้ช่วยทำเอกสาร\n\n' +
-    '🆓 ทดลองใช้ฟรี ' + FREE_TRIAL_LIMIT + ' ครั้งแรก (ทุกบัญชีใหม่)\n\n' +
-    '1️⃣ แพ็คเริ่มต้น 99 บาท/เดือน\n' +
-    '• ใช้งานฟรี 7 วันแรก\n' +
+    '🆓 ทดลองใช้ฟรี\n' +
+    '• สร้างเอกสารได้ 5 ครั้ง/เดือน ไม่มีค่าใช้จ่าย\n\n' +
+    '1️⃣ แพ็คเริ่มต้น 59 บาท/เดือน\n' +
     '• สร้างเอกสารได้ 30 ครั้ง/เดือน\n\n' +
-    '2️⃣ แพ็ค 299 บาท/เดือน\n' +
+    '2️⃣ แพ็คโปร 149 บาท/เดือน\n' +
     '• สร้างเอกสารได้ไม่จำกัด\n\n' +
-    '3️⃣ แพ็ค 990 บาท/เดือน\n' +
+    '3️⃣ แพ็คพรีเมียม 249 บาท/เดือน\n' +
     '• สร้างเอกสารได้ไม่จำกัด\n' +
     '• ระบบทำบัญชี/ยื่นภาษีรายเดือน (เร็วๆ นี้)\n\n' +
     '(น้องแชทตอบคำถามได้ฟรีทุกแพ็กเลยค่ะ 💕)\n\n' +
@@ -1038,10 +1074,10 @@ function buildTaxFeatureMessage_(lineUserId) {
   if (sub && sub.pkg.hasTax) {
     return '🧾 ระบบทำบัญชี/ยื่นภาษีรายเดือน กำลังพัฒนาอยู่ค่ะ จะเปิดให้ใช้งานเร็วๆ นี้นะคะ (ท่านมีสิทธิ์ใช้งานฟีเจอร์นี้อยู่แล้วในแพ็ก ' + sub.pkg.name + ')';
   }
-  return '🧾 ฟีเจอร์ระบบบัญชี/ยื่นภาษี อยู่ในแพ็ก 990 บาท/เดือนเท่านั้นนะคะ พิมพ์ "แพ็กเกจ" เพื่อดูรายละเอียดและอัปเกรดได้เลยค่ะ';
+  return '🧾 ฟีเจอร์ระบบบัญชี/ยื่นภาษี อยู่ในแพ็คพรีเมียม 249 บาท/เดือนเท่านั้นนะคะ พิมพ์ "แพ็กเกจ" เพื่อดูรายละเอียดและอัปเกรดได้เลยค่ะ';
 }
 
-// Only package 990 (hasAI) gets real AI answers; everyone else gets an upsell.
+// Only package premium249 (hasAI) gets real AI answers; everyone else gets an upsell.
 // AI FAQ assistant answers everyone immediately — first point of contact
 // for any message that isn't a keyword shortcut (e.g. a customer just
 // saying "สวัสดี" gets a real, immediate reply, not a paywall message).
