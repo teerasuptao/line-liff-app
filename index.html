@@ -882,7 +882,7 @@ function updatePreview(){
     pvEl.innerHTML='<div class="prev-tr" style="color:#aaa;font-size:10px"><span>ยังไม่มีรายการ</span><span></span></div>';
   } else {
     pvEl.innerHTML=items.slice(0,4).map(function(i){
-      const lt=(i.qty*i.price)-i.discount;
+      const lt=Math.max((i.qty*i.price)-i.discount, 0);
       return '<div class="prev-tr"><span>'+escapeHtml(i.name)+'</span><span style="text-align:right">'+lt.toLocaleString('th-TH',{minimumFractionDigits:2})+'</span></div>';
     }).join('')+(items.length>4?'<div class="prev-tr" style="color:#aaa;font-size:10px"><span>+ อีก '+(items.length-4)+' รายการ</span><span></span></div>':'');
   }
