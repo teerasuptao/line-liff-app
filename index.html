@@ -258,7 +258,7 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
   <div class="upgrade-box">
     <div class="upgrade-icon">🔒</div>
     <div class="upgrade-title">ใช้งานครบโควตาแล้ว</div>
-    <div class="upgrade-msg" id="upgradeMsg">คุณใช้งานฟรีครบโควตาแล้ว กรุณาสมัครแพ็กเกจเพื่อใช้งานต่อ</div>
+    <div class="upgrade-msg" id="upgradeMsg">คุณใช้งานฟรีครบ 50 ครั้งแล้ว กรุณาสมัครแพ็กเกจเพื่อใช้งานต่อ</div>
     <div class="upgrade-actions">
       <button class="btn btn-primary" onclick="contactAdminForUpgrade()">💬 ทักแอดมินเพื่อสมัครแพ็กเกจ</button>
       <button class="btn btn-accent" onclick="closeUpgradeModal()">ดูภายหลัง</button>
@@ -585,15 +585,10 @@ function renderPlanBadge(){
     el.style.display='none';
     return;
   }
-  if(pkg.expired){
-    el.textContent = '⚠️ ' + pkg.name + ' หมดอายุ';
-    el.style.display = 'inline-block';
-    return;
-  }
   const quotaText = (pkg.quotaPerMonth === null || pkg.quotaPerMonth === undefined)
     ? 'ไม่จำกัด'
     : (pkg.usageCount + '/' + pkg.quotaPerMonth + ' ครั้ง');
-  el.textContent = (pkg.id==='free' ? '🆓 ' : '📦 ') + pkg.name + ' · ' + quotaText;
+  el.textContent = (pkg.isTrial ? '🆓 ' : '📦 ') + pkg.name + ' · ' + quotaText;
   el.style.display = 'inline-block';
 }
 
@@ -740,7 +735,8 @@ function saveProfile(){
 
 // ── History ───────────────────────────────────────────────────
 function loadHistory(){
-  callServer('getDocHistory',{docType:currentType.name,lineAuth:currentLineAuth})
+  // [Fix] Use .id (e.g. 'quotation') to match backend's key-based sheet naming
+  callServer('getDocHistory',{docType:currentType.id,lineAuth:currentLineAuth})
     .then(function(items){
       const el=document.getElementById('historyList');
       if(!items||items.length===0){
@@ -846,7 +842,11 @@ function getItems(){
 function getTotals(){
   const items=getItems();
   let sub=0;
-  items.forEach(function(i){sub+=(i.qty*i.price)-i.discount;});
+  // [Fix] Align with backend math: each line total must be at least 0
+  items.forEach(function(i){
+    const lineTotal = Math.max((i.qty * i.price) - i.discount, 0);
+    sub += lineTotal;
+  });
   const hasVat=document.getElementById('includeVat').checked;
   const vat=hasVat?Math.round(sub*7)/100:0;
   return{sub:sub,vat:vat,grand:sub+vat};
@@ -1011,7 +1011,7 @@ function newDoc(){
 
 // ── Helpers ───────────────────────────────────────────────────
 function gv(id){const el=document.getElementById(id);return el?el.value.trim():'';}
-function setV(id,val){const el=document.getElementById(id);if(el&&val)el.value=val;}
+function setV(id,val){const el=document.getElementById(id);if(el)el.value=(val||'');}
 function escapeHtml(value){
   return String(value==null?'':value).replace(/[&<>"']/g,function(ch){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
@@ -1031,7 +1031,7 @@ function showToast(msg){
   toastT=setTimeout(function(){el.classList.remove('show');},4000);
 }
 // Shown when generatePDF returns upgradeRequired:true — either the free
-// tier's monthly quota ran out, or a paid package's monthly quota ran out.
+// trial's 50 uses ran out, or a paid package's monthly quota ran out.
 function showUpgradeModal(msg){
   document.getElementById('upgradeMsg').textContent = msg || 'ใช้งานครบโควตาแล้ว กรุณาสมัคร/อัปเกรดแพ็กเกจเพื่อใช้งานต่อ';
   document.getElementById('upgradeOverlay').classList.add('show');
