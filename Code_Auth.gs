@@ -6,6 +6,97 @@
 const SPREADSHEET_ID = '1ckKnGRcZS7RLu2qftr3WpdmDYSH4HR6oxioe3fTYH3g';
 const LINE_LOGIN_CHANNEL_ID = '2010618788';
 
+// Where a customer actually goes to subscribe/upgrade/pay right now, since
+// payment isn't automated yet — every "ทักแอดมิน" message the bot sends
+// MUST include this, or the customer has no real next step (this is the
+// exact bug reported: the bot said "ทักแอดมิน" with no link/ID attached).
+const ADMIN_CONTACT_NAME = 'Longlai intertrade';
+const ADMIN_CONTACT_LINE_ID = '@931btrgh';
+const ADMIN_CONTACT_URL = 'https://page.line.biz/account/@931btrgh';
+function adminContactBlock_() {
+  return '👤 ' + ADMIN_CONTACT_NAME + '\n' + ADMIN_CONTACT_URL + '\n(LINE ID: ' + ADMIN_CONTACT_LINE_ID + ')';
+}
+
+// ⚠️ REPLACE THIS before relying on the QR-in-chat flow below: this must be
+// a real HTTPS link to an image of your actual PromptPay/bank QR code
+// (upload it anywhere public — Google Drive "anyone with the link" share,
+// imgur, etc.). LINE's image message type requires a direct image URL, not
+// a page URL. Left blank/placeholder, the bot will just skip the QR image
+// and fall back to text-only instructions (see buildSubscribeReply_).
+const PAYMENT_QR_IMAGE_URL = '';
+
+function getPendingSubscriptionSheet_(ss) {
+  const headers = ['Timestamp', 'LINE User ID', 'Display Name', 'Requested Package', 'Status'];
+  let sheet = ss.getSheetByName('PendingSubscriptions');
+  if (!sheet) {
+    sheet = ss.insertSheet('PendingSubscriptions');
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headers);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#f0f0f0');
+  }
+  return sheet;
+}
+
+// Logs a subscribe request so it's sitting in one auditable place (instead
+// of scattered across LINE chat history) for the admin to cross-check
+// against incoming bank/PromptPay transfers and then flip the customer's
+// row in "Subscriptions" once payment is confirmed. This does NOT verify
+// payment automatically — there's no payment gateway wired up (that's a
+// bigger, separate build) — it just removes the "where did that customer's
+// request even go" problem.
+function logPendingSubscription_(lineUserId, displayName, pkg) {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = getPendingSubscriptionSheet_(ss);
+    sheet.appendRow([new Date(), lineUserId, displayName || '', pkg.name + ' (' + pkg.price + ' บาท)', 'รอตรวจสอบ']);
+  } catch (err) {
+    console.log('logPendingSubscription_ failed:', err);
+  }
+}
+
+function getLineDisplayName_(lineUserId) {
+  try {
+    const token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
+    if (!token || !lineUserId) return '';
+    const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/profile/' + lineUserId, {
+      headers: { Authorization: 'Bearer ' + token },
+      muteHttpExceptions: true
+    });
+    const data = JSON.parse(res.getContentText());
+    return data.displayName || '';
+  } catch (err) {
+    return '';
+  }
+}
+
+// Main handler for "I want to subscribe" style messages.
+// - If the message also names/numbers a package (e.g. "สมัครแพ็คโปร"), log
+//   the request immediately and reply with payment instructions + QR.
+// - Otherwise show the package list again and ask them to pick one, plus
+//   the direct admin contact for anyone who'd rather just message a person.
+function buildSubscribeReply_(text, lineUserId) {
+  const chosen = resolvePackageChoice_(text);
+  if (chosen) {
+    const displayName = getLineDisplayName_(lineUserId);
+    logPendingSubscription_(lineUserId, displayName, chosen);
+    let msg = '✅ รับคำขอสมัคร "' + chosen.name + '" (' + chosen.price + ' บาท/เดือน) แล้วนะคะ 🌸\n\n' +
+      'กรุณาโอนเงิน ' + chosen.price + ' บาท ตาม QR ด้านล่าง แล้วส่งสลิปให้แอดมินเพื่อยืนยันการเปิดใช้งานค่ะ\n\n' +
+      adminContactBlock_();
+    if (PAYMENT_QR_IMAGE_URL) {
+      return [
+        { type: 'text', text: msg },
+        { type: 'image', originalContentUrl: PAYMENT_QR_IMAGE_URL, previewImageUrl: PAYMENT_QR_IMAGE_URL }
+      ];
+    }
+    return [{ type: 'text', text: msg }];
+  }
+  return [{
+    type: 'text',
+    text: buildPackageInfoMessage_() + '\n\nพิมพ์ชื่อแพ็กที่สนใจ (เช่น "สมัครแพ็คโปร") เพื่อแจ้งความประสงค์ได้เลยค่ะ 🌸'
+  }];
+}
+
 // ── Packages ──────────────────────────────────────────────────
 // Priced for the actual target segment: ตลาดนัด / แม่ค้า-พ่อค้าออนไลน์รายย่อย
 // (mass-market micro-merchants), not SME/business buyers — keep these low
@@ -1010,21 +1101,27 @@ function handleLineWebhook_(body) {
       const lineUserId = ev.source && ev.source.userId;
 
       const match = findKeywordReply_(text);
-      let replyText;
+      let replyMessages;
 
       if (match) {
-        replyText = '👉 ' + match.label + '\nกดลิงก์นี้เพื่อเริ่มได้เลยค่ะ 💕\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + match.type;
+        replyMessages = [{ type: 'text', text: '👉 ' + match.label + '\nกดลิงก์นี้เพื่อเริ่มได้เลยค่ะ 💕\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + match.type }];
       } else if (isMenuQuery_(text)) {
-        replyText = buildDocumentMenuMessage_();
+        replyMessages = [{ type: 'text', text: buildDocumentMenuMessage_() }];
+      } else if (isSubscribeIntentQuery_(text)) {
+        // Fixes the reported bug: "สมัครที่ไหน" and similar phrases used to
+        // miss every keyword check below and fall through to the AI
+        // fallback, which just repeated the document menu instead of
+        // telling the customer where/how to actually sign up.
+        replyMessages = buildSubscribeReply_(text, lineUserId);
       } else if (isPackageInfoQuery_(text)) {
-        replyText = buildPackageInfoMessage_();
+        replyMessages = [{ type: 'text', text: buildPackageInfoMessage_() }];
       } else if (isTaxFeatureQuery_(text)) {
-        replyText = buildTaxFeatureMessage_(lineUserId);
+        replyMessages = [{ type: 'text', text: buildTaxFeatureMessage_(lineUserId) }];
       } else {
-        replyText = handleAiOrUpsell_(text, lineUserId);
+        replyMessages = [{ type: 'text', text: handleAiOrUpsell_(text, lineUserId) }];
       }
 
-      replyToLine_(replyToken, replyText);
+      replyMessagesToLine_(replyToken, replyMessages);
     } catch (err) {
       // Swallow errors per-event so one bad event doesn't break the whole webhook batch.
     }
@@ -1047,6 +1144,38 @@ function isPackageInfoQuery_(text) {
   });
 }
 
+// This is the fix for the reported bug: a customer typing "สมัครที่ไหน"
+// didn't match any keyword above (it has no full "แพ็กเกจ"/"สมัครสมาชิก"
+// substring) and fell straight through to the general AI fallback, which
+// just repeated the document-menu message instead of telling them where to
+// actually sign up. These broader subscribe/pay phrases catch that case.
+function isSubscribeIntentQuery_(text) {
+  const lower = (text || '').toLowerCase();
+  return [
+    'สมัครที่ไหน', 'สมัครยังไง', 'สมัครแบบไหน', 'จะสมัคร', 'อยากสมัคร', 'สนใจสมัคร',
+    'อัปเกรด', 'อัพเกรด', 'อยากอัปเกรด',
+    'จ่ายเงิน', 'จ่ายยังไง', 'จ่ายตังยังไง', 'ชำระเงิน', 'โอนเงิน', 'โอนตัง', 'payment'
+  ].some(function(kw) { return lower.indexOf(kw) > -1; });
+}
+
+// Loose match for a package the customer names/numbers when replying to the
+// package list (e.g. "เอาแพ็ค 2", "อยากได้แพ็คโปร", "สมัครพรีเมียม"). Digit
+// choices only count right after "แพ็ค/แพ็ก/แพค" specifically, so a stray
+// number elsewhere in the message (a date, a quantity) can't misfire.
+function resolvePackageChoice_(text) {
+  const lower = (text || '').toLowerCase();
+  if (lower.indexOf('พรีเมียม') > -1 || lower.indexOf('249') > -1) return PACKAGES.premium249;
+  if (lower.indexOf('โปร') > -1 || lower.indexOf('149') > -1) return PACKAGES.pro149;
+  if (lower.indexOf('เริ่มต้น') > -1 || lower.indexOf('59') > -1) return PACKAGES.starter59;
+  const m = lower.match(/แพ็?[คก]\s*([123])/);
+  if (m) {
+    if (m[1] === '3') return PACKAGES.premium249;
+    if (m[1] === '2') return PACKAGES.pro149;
+    if (m[1] === '1') return PACKAGES.starter59;
+  }
+  return null;
+}
+
 function isTaxFeatureQuery_(text) {
   const lower = (text || '').toLowerCase();
   return ['ภาษี', 'ยื่นภาษี', 'ทำบัญชี', 'บัญชี'].some(function(kw) {
@@ -1066,7 +1195,8 @@ function buildPackageInfoMessage_() {
     '• สร้างเอกสารได้ไม่จำกัด\n' +
     '• ระบบทำบัญชี/ยื่นภาษีรายเดือน (เร็วๆ นี้)\n\n' +
     '(น้องแชทตอบคำถามได้ฟรีทุกแพ็กเลยค่ะ 💕)\n\n' +
-    'สนใจสมัคร/อัปเกรดแพ็กเกจ ทักแอดมินได้เลยนะคะ 🙏💕';
+    'สนใจสมัคร/อัปเกรดแพ็กเกจ ทักแอดมินได้เลยนะคะ 🙏💕\n\n' +
+    adminContactBlock_();
 }
 
 function buildTaxFeatureMessage_(lineUserId) {
@@ -1128,13 +1258,21 @@ function askGemini_(userText) {
 }
 
 function replyToLine_(replyToken, text) {
+  replyMessagesToLine_(replyToken, [{ type: 'text', text: text }]);
+}
+
+// Like replyToLine_ but takes an array of LINE message objects, so a single
+// reply can include e.g. a text message plus a QR-code image message (used
+// by the subscribe flow below — LINE's reply API supports up to 5 messages
+// per reply token).
+function replyMessagesToLine_(replyToken, messages) {
   const token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
   if (!token) { console.log('LINE_CHANNEL_ACCESS_TOKEN is missing!'); return; }
   const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'post',
     contentType: 'application/json',
     headers: { Authorization: 'Bearer ' + token },
-    payload: JSON.stringify({ replyToken: replyToken, messages: [{ type: 'text', text: text }] }),
+    payload: JSON.stringify({ replyToken: replyToken, messages: messages }),
     muteHttpExceptions: true
   });
   console.log('LINE reply status:', res.getResponseCode(), res.getContentText()); // TEMP DEBUG — remove later
