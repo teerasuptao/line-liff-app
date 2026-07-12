@@ -294,12 +294,15 @@ function getUserSubscription_(lineUserId) {
   if (!pkg) return null; // unknown/typo'd package id in the sheet — treat as no package
   // Only PAID packages expire on a date; the free tier has no expiry date
   // and is instead capped purely by its monthly quota.
-  if (packageId !== 'free' && expiryDate && new Date(expiryDate) < new Date()) {
+    if (packageId !== 'free' && expiryDate && new Date(expiryDate) < new Date()) {
     return { pkg: pkg, rowIndex: found.rowIndex, usageCount: 0, usageMonth: null, expired: true };
   }
 
   const currentMonthKey = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM');
-  const count = (usageMonth === currentMonthKey) ? Number(usageCount || 0) : 0;
+  const usageMonthStr = String(usageMonth || '');
+  const count = (usageMonthStr === currentMonthKey) ? Number(usageCount || 0) : 0;
+
+  // Already handled above with type safety
 
   return { pkg: pkg, rowIndex: found.rowIndex, usageCount: count, usageMonth: currentMonthKey };
 }
@@ -845,43 +848,25 @@ function generatePDF(formData, lineAuth) {
   try {
     const user = verifyLineUser_(lineAuth);
 
-    const quota = checkAndConsumeQuota_(user.lineUserId);
-    if (!quota.allowed) {
-      // Return here (instead of throw) so we can attach upgradeRequired:true —
-      // the frontend's nicer upgrade modal only shows when that flag is set;
-      // a thrown Error would fall through to a plain error toast instead.
-      if (quota.reason === 'no_package') {
-        return {
-          success: false,
-          upgradeRequired: true,
-          error: 'บัญชีนี้ยังไม่มีแพ็กเกจที่ใช้งานได้ กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง หรือทักแอดมิน'
-        };
-      }
-      if (quota.reason === 'expired') {
-        return {
-          success: false,
-          upgradeRequired: true,
-          error: 'แพ็ก "' + quota.pkg.name + '" ของคุณหมดอายุแล้ว กรุณาต่ออายุเพื่อใช้งานต่อค่ะ (ทักแอดมินได้เลยนะคะ)'
-        };
-      }
-      if (quota.reason === 'free_quota_exceeded') {
-        return {
-          success: false,
-          upgradeRequired: true,
-          error: 'ใช้งานฟรีครบ ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนแล้ว สมัครแพ็กเริ่มต้นเพียง 59 บาท/เดือน เพื่อใช้งานต่อได้เลยค่ะ'
-        };
-      }
-      return {
-        success: false,
-        upgradeRequired: true,
-        error: 'ใช้งานครบโควตา ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนของแพ็ก "' + quota.pkg.name + '" แล้ว กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานต่อ'
-      };
-    }
-
+    // [Fix] Validate inputs BEFORE consuming quota
     if (!formData.companyName) throw new Error('กรุณากรอกชื่อบริษัท');
     if (!formData.docNo)       throw new Error('กรุณากรอกเลขที่เอกสาร');
     if (!formData.docDate)     throw new Error('กรุณาเลือกวันที่ออกเอกสาร');
     if (!formData.items || formData.items.length === 0) throw new Error('กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ');
+
+    const quota = checkAndConsumeQuota_(user.lineUserId);
+    if (!quota.allowed) {
+      if (quota.reason === 'no_package') {
+        return { success: false, upgradeRequired: true, error: 'บัญชีนี้ยังไม่มีแพ็กเกจที่ใช้งานได้ กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง หรือทักแอดมิน' };
+      }
+      if (quota.reason === 'expired') {
+        return { success: false, upgradeRequired: true, error: 'แพ็ก "' + quota.pkg.name + '" ของคุณหมดอายุแล้ว กรุณาต่ออายุเพื่อใช้งานต่อค่ะ (ทักแอดมินได้เลยนะคะ)' };
+      }
+      if (quota.reason === 'free_quota_exceeded') {
+        return { success: false, upgradeRequired: true, error: 'ใช้งานฟรีครบ ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนแล้ว สมัครแพ็กเริ่มต้นเพียง 59 บาท/เดือน เพื่อใช้งานต่อได้เลยค่ะ' };
+      }
+      return { success: false, upgradeRequired: true, error: 'ใช้งานครบโควตา ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนของแพ็ก "' + quota.pkg.name + '" แล้ว กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานต่อ' };
+    }
 
     const html = buildDocumentHTML(formData);
     const folder = DriveApp.getRootFolder();
@@ -892,8 +877,11 @@ function generatePDF(formData, lineAuth) {
     pdfBlob.setName(fileName);
     const pdfFile = folder.createFile(pdfBlob);
     pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    // Cleanup tmp file
     tmpFile.setTrashed(true);
     tmpFile = null;
+
     saveRecord(formData, pdfFile.getUrl(), user);
     saveCustomerFromDoc_(
       user.lineUserId,
@@ -903,27 +891,22 @@ function generatePDF(formData, lineAuth) {
       formData.customerBranch  || formData.vendorBranch  || '',
       formData.customerPhone   || formData.vendorPhone   || ''
     );
-    // Auto-import into the accounting system: only "ใบเสร็จรับเงิน" (receipt)
-    // represents money actually received, so only receipts count as income
-    // for tax purposes — quotations/PO/invoice aren't real cash movement yet.
+    
     if (formData.docType === 'receipt') {
       importReceiptAsIncome_(user.lineUserId, formData);
     }
+    
     return {
       success: true,
       url: pdfFile.getUrl(),
       fileName: fileName,
-      remainingQuota: quota.remaining // null = unlimited
+      remainingQuota: quota.remaining
     };
   } catch(e) {
     return { success: false, error: e.message || e.toString() };
   } finally {
     if (tmpFile) {
-      try {
-        tmpFile.setTrashed(true);
-      } catch(cleanupError) {
-        console.log('tmp cleanup error:', cleanupError);
-      }
+      try { tmpFile.setTrashed(true); } catch(err) {}
     }
   }
 }
@@ -932,7 +915,9 @@ function generatePDF(formData, lineAuth) {
 function saveRecord(data, pdfUrl, user) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheetName = data.docTypeName || 'เอกสาร';
+    // Use docType (e.g. 'quotation') for sheet name to match getDocHistory, 
+    // but fallback to docTypeName if docType is missing.
+    const sheetName = data.docType || data.docTypeName || 'เอกสาร';
     let sheet = ss.getSheetByName(sheetName);
     if (!sheet) {
       sheet = ss.insertSheet(sheetName);
@@ -961,7 +946,15 @@ function getDocHistory(docType, lineAuth) {
   try {
     const user = verifyLineUser_(lineAuth);
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(docType);
+    // Try both the key (quotation) and the display name (ใบเสนอราคา)
+    let sheet = ss.getSheetByName(docType);
+    if (!sheet) {
+      const nameMap = {
+        'quotation': 'ใบเสนอราคา', 'po': 'ใบสั่งซื้อ', 'invoice': 'ใบแจ้งหนี้',
+        'receipt': 'ใบเสร็จรับเงิน', 'delivery': 'ใบส่งของ', 'billing': 'ใบวางบิล'
+      };
+      sheet = ss.getSheetByName(nameMap[docType] || docType);
+    }
     if (!sheet) return [];
     const data = sheet.getDataRange().getValues();
     const result = [];
@@ -1072,6 +1065,8 @@ function buildDocumentHTML(d) {
       +'<td class="tr">'+lineTotal.toLocaleString('th-TH',{minimumFractionDigits:2})+'</td>'
       +'</tr>';
   }).join('');
+
+  if (!d.docTypeName) d.docTypeName = 'ใบเสนอราคา';
   const typeConfig={
     'ใบเสนอราคา':    {rl:'เรียน',           el:'วันหมดอายุ',          ev:d.expireDate||'-',   sig:'ผู้มีอำนาจลงนาม', note:d.note||'ราคานี้มีผลภายใน 30 วันนับจากวันที่ออกเอกสาร'},
     'ใบแจ้งหนี้':    {rl:'เรียน',           el:'วันครบกำหนดชำระ',     ev:d.dueDate||'-',      sig:'ผู้มีอำนาจลงนาม', note:d.note||'กรุณาชำระเงินภายในวันที่กำหนด'},
@@ -1081,11 +1076,13 @@ function buildDocumentHTML(d) {
     'ใบวางบิล':      {rl:'เรียน',           el:'วันครบกำหนดชำระ',     ev:d.dueDate||'-',      sig:'ผู้มีอำนาจลงนาม', note:d.note||'กรุณาชำระเงินตามกำหนด'},
   };
   const cfg=typeConfig[d.docTypeName]||typeConfig['ใบเสนอราคา'];
-  const rName=d.vendorName||d.customerName||'-';
-  const rAddr=d.vendorAddress||d.customerAddress||'';
-  const rTax=d.vendorTaxId||d.customerTaxId||'';
-  const rBranch=d.vendorBranch||d.customerBranch||'';
-  const rPhone=d.vendorPhone||d.customerPhone||'';
+  // [Fix] Support both Purchase Orders (Vendor) and Sales Docs (Customer)
+  const isPO = d.docType === 'po' || d.docTypeName === 'ใบสั่งซื้อ';
+  const rName = isPO ? (d.vendorName || d.customerName || '-') : (d.customerName || d.vendorName || '-');
+  const rAddr = isPO ? (d.vendorAddress || d.customerAddress || '') : (d.customerAddress || d.vendorAddress || '');
+  const rTax  = isPO ? (d.vendorTaxId || d.customerTaxId || '') : (d.customerTaxId || d.vendorTaxId || '');
+  const rBranch = isPO ? (d.vendorBranch || d.customerBranch || '') : (d.customerBranch || d.vendorBranch || '');
+  const rPhone  = isPO ? (d.vendorPhone || d.customerPhone || '') : (d.customerPhone || d.vendorPhone || '');
   return `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"/>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap');
@@ -1218,20 +1215,18 @@ function handleLineWebhook_(body) {
       const match = findKeywordReply_(text);
       let replyMessages;
 
+      // [Fix] Ensure priority routing for subscribe/approve flows
       if (adminApproveReply) {
         replyMessages = adminApproveReply;
       } else if (isWhoAmIQuery_(text)) {
         replyMessages = [{ type: 'text', text: 'LINE User ID ของคุณคือ:\n' + lineUserId }];
+      } else if (isSubscribeIntentQuery_(text)) {
+        // [Fix] Check subscribe intent BEFORE general document menu to catch "สมัคร" correctly
+        replyMessages = buildSubscribeReply_(text, lineUserId);
       } else if (match) {
         replyMessages = [{ type: 'text', text: '👉 ' + match.label + '\nกดลิงก์นี้เพื่อเริ่มได้เลยค่ะ 💕\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + match.type }];
       } else if (isMenuQuery_(text)) {
         replyMessages = [{ type: 'text', text: buildDocumentMenuMessage_() }];
-      } else if (isSubscribeIntentQuery_(text)) {
-        // Fixes the reported bug: "สมัครที่ไหน" and similar phrases used to
-        // miss every keyword check below and fall through to the AI
-        // fallback, which just repeated the document menu instead of
-        // telling the customer where/how to actually sign up.
-        replyMessages = buildSubscribeReply_(text, lineUserId);
       } else if (isPackageInfoQuery_(text)) {
         replyMessages = [{ type: 'text', text: buildPackageInfoMessage_() }];
       } else if (isTaxFeatureQuery_(text)) {
@@ -1269,12 +1264,15 @@ function isPackageInfoQuery_(text) {
 // just repeated the document-menu message instead of telling them where to
 // actually sign up. These broader subscribe/pay phrases catch that case.
 function isSubscribeIntentQuery_(text) {
-  const lower = (text || '').toLowerCase();
-  return [
-    'สมัครที่ไหน', 'สมัครยังไง', 'สมัครแบบไหน', 'จะสมัคร', 'อยากสมัคร', 'สนใจสมัคร',
+  const lower = (text || '').trim().toLowerCase();
+  // [Fix] Add "สมัคร" as a standalone keyword and cover "สมัครแพ็คโปร" etc.
+  // We use regex or a more flexible check to ensure "สมัคร" alone works.
+  const keywords = [
+    'สมัคร', 'สมัครที่ไหน', 'สมัครยังไง', 'สมัครแบบไหน', 'จะสมัคร', 'อยากสมัคร', 'สนใจสมัคร',
     'อัปเกรด', 'อัพเกรด', 'อยากอัปเกรด',
     'จ่ายเงิน', 'จ่ายยังไง', 'จ่ายตังยังไง', 'ชำระเงิน', 'โอนเงิน', 'โอนตัง', 'payment'
-  ].some(function(kw) { return lower.indexOf(kw) > -1; });
+  ];
+  return keywords.some(function(kw) { return lower.indexOf(kw) > -1; });
 }
 
 // Loose match for a package the customer names/numbers when replying to the
@@ -1283,9 +1281,11 @@ function isSubscribeIntentQuery_(text) {
 // number elsewhere in the message (a date, a quantity) can't misfire.
 function resolvePackageChoice_(text) {
   const lower = (text || '').toLowerCase();
-  if (lower.indexOf('พรีเมียม') > -1 || lower.indexOf('249') > -1) return PACKAGES.premium249;
-  if (lower.indexOf('โปร') > -1 || lower.indexOf('149') > -1) return PACKAGES.pro149;
-  if (lower.indexOf('เริ่มต้น') > -1 || lower.indexOf('59') > -1) return PACKAGES.starter59;
+  // [Fix] Better matching for package names to avoid missing "สมัครแพ็คโปร"
+  if (lower.indexOf('พรีเมียม') > -1 || lower.indexOf('premium') > -1 || lower.indexOf('249') > -1) return PACKAGES.premium249;
+  if (lower.indexOf('โปร') > -1 || lower.indexOf('pro') > -1 || lower.indexOf('149') > -1) return PACKAGES.pro149;
+  if (lower.indexOf('เริ่มต้น') > -1 || lower.indexOf('starter') > -1 || lower.indexOf('59') > -1) return PACKAGES.starter59;
+  
   const m = lower.match(/แพ็?[คก]\s*([123])/);
   if (m) {
     if (m[1] === '3') return PACKAGES.premium249;
@@ -1352,7 +1352,7 @@ function askGemini_(userText) {
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   if (!apiKey) return 'ขออภัยค่ะ ระบบ AI ยังไม่ได้ตั้งค่า รบกวนติดต่อผู้ดูแลระบบนะคะ 🙏';
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
   const payload = {
     system_instruction: { parts: [{ text: BOT_SYSTEM_PROMPT_ }] },
     contents: [{ role: 'user', parts: [{ text: userText }] }]
@@ -1387,14 +1387,18 @@ function replyToLine_(replyToken, text) {
 function replyMessagesToLine_(replyToken, messages) {
   const token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
   if (!token) { console.log('LINE_CHANNEL_ACCESS_TOKEN is missing!'); return; }
-  const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { Authorization: 'Bearer ' + token },
-    payload: JSON.stringify({ replyToken: replyToken, messages: messages }),
-    muteHttpExceptions: true
-  });
-  console.log('LINE reply status:', res.getResponseCode(), res.getContentText()); // TEMP DEBUG — remove later
+  try {
+    const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token },
+      payload: JSON.stringify({ replyToken: replyToken, messages: messages }),
+      muteHttpExceptions: true
+    });
+    console.log('LINE reply status:', res.getResponseCode(), res.getContentText());
+  } catch (err) {
+    console.log('replyMessagesToLine_ error:', err);
+  }
 }
 
 // Sends a message outside of a reply-token context (e.g. notifying the
@@ -1402,14 +1406,18 @@ function replyMessagesToLine_(replyToken, messages) {
 // customer their package just got activated) — used by the admin-approve
 // flow so neither side has to wait on a reply-token from their own message.
 function pushToLine_(toUserId, messages) {
-  const token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
-  if (!token || !toUserId) return;
-  const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { Authorization: 'Bearer ' + token },
-    payload: JSON.stringify({ to: toUserId, messages: messages }),
-    muteHttpExceptions: true
-  });
-  console.log('LINE push status:', res.getResponseCode(), res.getContentText());
+  try {
+    const token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
+    if (!token || !toUserId) return;
+    const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token },
+      payload: JSON.stringify({ to: toUserId, messages: messages }),
+      muteHttpExceptions: true
+    });
+    console.log('LINE push status:', res.getResponseCode(), res.getContentText());
+  } catch (err) {
+    console.log('pushToLine_ error:', err);
+  }
 }
