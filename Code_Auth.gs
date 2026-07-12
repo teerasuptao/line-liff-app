@@ -25,8 +25,40 @@ function adminContactBlock_() {
 // and fall back to text-only instructions (see buildSubscribeReply_).
 const PAYMENT_QR_IMAGE_URL = '';
 
+// Bank transfer as the payment method while the PromptPay QR is still
+// pending bank approval — swap PAYMENT_QR_IMAGE_URL in once that's ready;
+// you can keep both shown (QR + bank details) or remove this block later,
+// whichever you prefer.
+// ⚠️ DOUBLE-CHECK THE ACCOUNT NUMBER AGAINST THE PHYSICAL PASSBOOK BEFORE
+// DEPLOYING — this was transcribed from a photo and a single misread digit
+// here means a customer's real money goes to the wrong account. Verify all
+// 10 digits, not just the first few, before this goes live.
+const BANK_NAME = 'ธนาคารกสิกรไทย (KBank)';
+const BANK_ACCOUNT_NO = '215-1-32925-2';
+const BANK_ACCOUNT_NAME = 'บจก. หลงใหล อินเตอร์เทรด';
+function bankTransferBlock_() {
+  return '🏦 โอนเงินผ่านบัญชีธนาคาร\n' +
+    BANK_NAME + '\n' +
+    'เลขบัญชี: ' + BANK_ACCOUNT_NO + '\n' +
+    'ชื่อบัญชี: ' + BANK_ACCOUNT_NAME;
+}
+
+// ⚠️ SET THIS before the admin-approve feature will work: your own LINE
+// user ID (the one that messages this OA when YOU chat with it, not the OA
+// account's own ID/handle). Bootstrap it by messaging the bot the exact
+// phrase "ไอดีของฉัน" once — it'll reply with your LINE User ID, which you
+// then paste in here and redeploy. Left blank, the "อนุมัติ ..." command
+// below is disabled entirely (falls through to the normal AI/menu flow) —
+// this is intentional so a random customer can't approve their own package
+// just by guessing the command.
+const ADMIN_LINE_USER_ID = '';
+
+function isAdmin_(lineUserId) {
+  return !!ADMIN_LINE_USER_ID && lineUserId === ADMIN_LINE_USER_ID;
+}
+
 function getPendingSubscriptionSheet_(ss) {
-  const headers = ['Timestamp', 'LINE User ID', 'Display Name', 'Requested Package', 'Status'];
+  const headers = ['Timestamp', 'LINE User ID', 'Display Name', 'Requested Package', 'Package ID', 'Status'];
   let sheet = ss.getSheetByName('PendingSubscriptions');
   if (!sheet) {
     sheet = ss.insertSheet('PendingSubscriptions');
@@ -40,18 +72,24 @@ function getPendingSubscriptionSheet_(ss) {
 
 // Logs a subscribe request so it's sitting in one auditable place (instead
 // of scattered across LINE chat history) for the admin to cross-check
-// against incoming bank/PromptPay transfers and then flip the customer's
-// row in "Subscriptions" once payment is confirmed. This does NOT verify
-// payment automatically — there's no payment gateway wired up (that's a
-// bigger, separate build) — it just removes the "where did that customer's
-// request even go" problem.
+// against incoming bank/PromptPay transfers — AND (if ADMIN_LINE_USER_ID is
+// set) pushes a real-time notice straight to the admin's LINE with the
+// exact command to type to activate it, so opening the sheet is optional
+// rather than required every time.
 function logPendingSubscription_(lineUserId, displayName, pkg) {
+  const name = displayName || lineUserId;
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = getPendingSubscriptionSheet_(ss);
-    sheet.appendRow([new Date(), lineUserId, displayName || '', pkg.name + ' (' + pkg.price + ' บาท)', 'รอตรวจสอบ']);
+    sheet.appendRow([new Date(), lineUserId, name, pkg.name + ' (' + pkg.price + ' บาท)', pkg.id, 'รอตรวจสอบ']);
   } catch (err) {
     console.log('logPendingSubscription_ failed:', err);
+  }
+  if (ADMIN_LINE_USER_ID) {
+    pushToLine_(ADMIN_LINE_USER_ID, [{
+      type: 'text',
+      text: '🔔 คำขอสมัครใหม่\nชื่อ: ' + name + '\nแพ็ก: ' + pkg.name + ' (' + pkg.price + ' บาท)\n\nพิมพ์ "อนุมัติ ' + name + '" เพื่อเปิดใช้งานให้ลูกค้าคนนี้ได้เลยค่ะ'
+    }]);
   }
 }
 
@@ -70,7 +108,81 @@ function getLineDisplayName_(lineUserId) {
   }
 }
 
-// Main handler for "I want to subscribe" style messages.
+// Admin types "อนุมัติ <ชื่อลูกค้า>" in this same chat — matched against the
+// most recent still-pending row in PendingSubscriptions for that name (does
+// NOT require opening the Google Sheet). Returns a reply-message array if
+// this text WAS an approve command (whether it succeeded or found nothing),
+// or null if it wasn't an approve command at all — callers should fall
+// through to normal handling on null.
+function tryHandleAdminApprove_(text, lineUserId) {
+  if (!isAdmin_(lineUserId)) return null;
+  const m = (text || '').match(/^อนุมัติ\s*(.+)$/);
+  if (!m) return null;
+  const name = m[1].trim();
+  if (!name) return [{ type: 'text', text: 'พิมพ์ชื่อลูกค้าต่อท้ายด้วยค่ะ เช่น "อนุมัติ สมชาย"' }];
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const pendingSheet = getPendingSubscriptionSheet_(ss);
+  const data = pendingSheet.getDataRange().getValues();
+  const lowerName = name.toLowerCase();
+
+  // Search bottom-up so the most recent request for that name wins.
+  let match = null;
+  for (let i = data.length - 1; i >= 1; i--) {
+    const rowName = String(data[i][2] || '').toLowerCase();
+    const status = data[i][5];
+    if (status === 'รอตรวจสอบ' && (rowName.indexOf(lowerName) > -1 || lowerName.indexOf(rowName) > -1)) {
+      match = { rowIndex: i + 1, row: data[i] };
+      break;
+    }
+  }
+  if (!match) {
+    return [{ type: 'text', text: 'ไม่พบคำขอที่รอดำเนินการของ "' + name + '" ค่ะ (เช็คสะกดชื่อ หรือดูในชีท PendingSubscriptions ได้เลยนะคะ)' }];
+  }
+
+  const customerLineUserId = match.row[1];
+  const customerName = match.row[2];
+  const pkgId = match.row[4];
+  const pkg = PACKAGES[pkgId];
+  if (!pkg) {
+    return [{ type: 'text', text: 'เจอคำขอของ "' + customerName + '" แต่รหัสแพ็กเกจในชีทไม่ถูกต้อง (' + pkgId + ') กรุณาแก้ในชีท Subscriptions ด้วยตัวเองนะคะ' }];
+  }
+
+  activateSubscription_(customerLineUserId, pkgId);
+  pendingSheet.getRange(match.rowIndex, 6).setValue('อนุมัติแล้ว ' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'dd/MM/yyyy HH:mm'));
+
+  pushToLine_(customerLineUserId, [{
+    type: 'text',
+    text: '🎉 เปิดใช้งานแพ็ก "' + pkg.name + '" ให้เรียบร้อยแล้วค่ะ ขอบคุณที่ใช้บริการนะคะ 💕'
+  }]);
+
+  return [{ type: 'text', text: '✅ เปิดใช้งานแพ็ก "' + pkg.name + '" ให้ ' + customerName + ' เรียบร้อยแล้วค่ะ' }];
+}
+
+// Writes/updates a customer's row in "Subscriptions" directly — used by the
+// admin-approve command above. Gives them 30 days from today and resets
+// their usage counter for the new billing cycle.
+function activateSubscription_(lineUserId, packageId) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = getSubscriptionSheet_(ss);
+  const now = new Date();
+  const expiry = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const monthKey = Utilities.formatDate(now, 'Asia/Bangkok', 'yyyy-MM');
+  const found = findSubscriptionRow_(sheet, lineUserId);
+  if (found) {
+    sheet.getRange(found.rowIndex, 1, 1, 7).setValues([[lineUserId, packageId, now, expiry, monthKey, 0, now]]);
+  } else {
+    sheet.appendRow([lineUserId, packageId, now, expiry, monthKey, 0, now]);
+  }
+}
+
+// Bootstrap helper: message the bot "ไอดีของฉัน" once to get your own LINE
+// User ID back, so you can paste it into ADMIN_LINE_USER_ID above.
+function isWhoAmIQuery_(text) {
+  return (text || '').trim() === 'ไอดีของฉัน';
+}
+
+
 // - If the message also names/numbers a package (e.g. "สมัครแพ็คโปร"), log
 //   the request immediately and reply with payment instructions + QR.
 // - Otherwise show the package list again and ask them to pick one, plus
@@ -81,8 +193,10 @@ function buildSubscribeReply_(text, lineUserId) {
     const displayName = getLineDisplayName_(lineUserId);
     logPendingSubscription_(lineUserId, displayName, chosen);
     let msg = '✅ รับคำขอสมัคร "' + chosen.name + '" (' + chosen.price + ' บาท/เดือน) แล้วนะคะ 🌸\n\n' +
-      'กรุณาโอนเงิน ' + chosen.price + ' บาท ตาม QR ด้านล่าง แล้วส่งสลิปให้แอดมินเพื่อยืนยันการเปิดใช้งานค่ะ\n\n' +
-      adminContactBlock_();
+      'กรุณาโอนเงิน ' + chosen.price + ' บาท ตามช่องทางด้านล่าง แล้วส่งสลิปให้แอดมินเพื่อยืนยันการเปิดใช้งานค่ะ\n\n' +
+      bankTransferBlock_() +
+      (PAYMENT_QR_IMAGE_URL ? '\n\n(หรือสแกน QR ที่แนบด้านล่างนี้ก็ได้ค่ะ)' : '') +
+      '\n\n' + adminContactBlock_();
     if (PAYMENT_QR_IMAGE_URL) {
       return [
         { type: 'text', text: msg },
@@ -1100,10 +1214,15 @@ function handleLineWebhook_(body) {
       const replyToken = ev.replyToken;
       const lineUserId = ev.source && ev.source.userId;
 
+      const adminApproveReply = tryHandleAdminApprove_(text, lineUserId);
       const match = findKeywordReply_(text);
       let replyMessages;
 
-      if (match) {
+      if (adminApproveReply) {
+        replyMessages = adminApproveReply;
+      } else if (isWhoAmIQuery_(text)) {
+        replyMessages = [{ type: 'text', text: 'LINE User ID ของคุณคือ:\n' + lineUserId }];
+      } else if (match) {
         replyMessages = [{ type: 'text', text: '👉 ' + match.label + '\nกดลิงก์นี้เพื่อเริ่มได้เลยค่ะ 💕\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + match.type }];
       } else if (isMenuQuery_(text)) {
         replyMessages = [{ type: 'text', text: buildDocumentMenuMessage_() }];
@@ -1276,4 +1395,21 @@ function replyMessagesToLine_(replyToken, messages) {
     muteHttpExceptions: true
   });
   console.log('LINE reply status:', res.getResponseCode(), res.getContentText()); // TEMP DEBUG — remove later
+}
+
+// Sends a message outside of a reply-token context (e.g. notifying the
+// admin the instant a new subscribe request comes in, or telling a
+// customer their package just got activated) — used by the admin-approve
+// flow so neither side has to wait on a reply-token from their own message.
+function pushToLine_(toUserId, messages) {
+  const token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
+  if (!token || !toUserId) return;
+  const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + token },
+    payload: JSON.stringify({ to: toUserId, messages: messages }),
+    muteHttpExceptions: true
+  });
+  console.log('LINE push status:', res.getResponseCode(), res.getContentText());
 }
