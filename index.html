@@ -258,7 +258,7 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
   <div class="upgrade-box">
     <div class="upgrade-icon">🔒</div>
     <div class="upgrade-title">ใช้งานครบโควตาแล้ว</div>
-    <div class="upgrade-msg" id="upgradeMsg">คุณใช้งานฟรีครบ 50 ครั้งแล้ว กรุณาสมัครแพ็กเกจเพื่อใช้งานต่อ</div>
+    <div class="upgrade-msg" id="upgradeMsg">คุณใช้งานฟรีครบโควตาแล้ว กรุณาสมัครแพ็กเกจเพื่อใช้งานต่อ</div>
     <div class="upgrade-actions">
       <button class="btn btn-primary" onclick="contactAdminForUpgrade()">💬 ทักแอดมินเพื่อสมัครแพ็กเกจ</button>
       <button class="btn btn-accent" onclick="closeUpgradeModal()">ดูภายหลัง</button>
@@ -585,10 +585,15 @@ function renderPlanBadge(){
     el.style.display='none';
     return;
   }
+  if(pkg.expired){
+    el.textContent = '⚠️ ' + pkg.name + ' หมดอายุ';
+    el.style.display = 'inline-block';
+    return;
+  }
   const quotaText = (pkg.quotaPerMonth === null || pkg.quotaPerMonth === undefined)
     ? 'ไม่จำกัด'
     : (pkg.usageCount + '/' + pkg.quotaPerMonth + ' ครั้ง');
-  el.textContent = (pkg.isTrial ? '🆓 ' : '📦 ') + pkg.name + ' · ' + quotaText;
+  el.textContent = (pkg.id==='free' ? '🆓 ' : '📦 ') + pkg.name + ' · ' + quotaText;
   el.style.display = 'inline-block';
 }
 
@@ -1026,7 +1031,7 @@ function showToast(msg){
   toastT=setTimeout(function(){el.classList.remove('show');},4000);
 }
 // Shown when generatePDF returns upgradeRequired:true — either the free
-// trial's 50 uses ran out, or a paid package's monthly quota ran out.
+// tier's monthly quota ran out, or a paid package's monthly quota ran out.
 function showUpgradeModal(msg){
   document.getElementById('upgradeMsg').textContent = msg || 'ใช้งานครบโควตาแล้ว กรุณาสมัคร/อัปเกรดแพ็กเกจเพื่อใช้งานต่อ';
   document.getElementById('upgradeOverlay').classList.add('show');
