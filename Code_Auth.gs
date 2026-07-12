@@ -12,7 +12,7 @@ const LINE_LOGIN_CHANNEL_ID = '2010618788';
 // exact bug reported: the bot said "ทักแอดมิน" with no link/ID attached).
 const ADMIN_CONTACT_NAME = 'Longlai intertrade';
 const ADMIN_CONTACT_LINE_ID = '@931btrgh';
-const ADMIN_CONTACT_URL = 'https://page.line.biz/account/@931btrgh';
+const ADMIN_CONTACT_URL = 'https://page.line.biz/account/@ง่ายผู้ช่วยเอกสาร';
 function adminContactBlock_() {
   return '👤 ' + ADMIN_CONTACT_NAME + '\n' + ADMIN_CONTACT_URL + '\n(LINE ID: ' + ADMIN_CONTACT_LINE_ID + ')';
 }
@@ -51,7 +51,7 @@ function bankTransferBlock_() {
 // below is disabled entirely (falls through to the normal AI/menu flow) —
 // this is intentional so a random customer can't approve their own package
 // just by guessing the command.
-const ADMIN_LINE_USER_ID = '';
+const ADMIN_LINE_USER_ID = 'Ue73bf6d11364bfbb9fb4df6c727a25b5';
 
 function isAdmin_(lineUserId) {
   return !!ADMIN_LINE_USER_ID && lineUserId === ADMIN_LINE_USER_ID;
