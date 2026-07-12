@@ -358,8 +358,29 @@ function checkAndConsumeQuota_(lineUserId) {
   return {
     allowed: true,
     pkg: sub.pkg,
-    remaining: sub.pkg.quotaPerMonth !== null ? (sub.pkg.quotaPerMonth - sub.usageCount - 1) : null
+    remaining: sub.pkg.quotaPerMonth !== null ? (sub.pkg.quotaPerMonth - sub.usageCount - 1) : null,
+    // For rollbackQuotaUsage_ below — quota is consumed here, BEFORE we know
+    // the PDF actually gets generated successfully. If Drive/PDF creation
+    // fails afterward (storage full, transient error), the caller should
+    // roll this back so the customer isn't charged a quota unit for a
+    // document that was never actually produced.
+    rowIndex: sub.rowIndex,
+    previousUsageCount: sub.usageCount
   };
+}
+
+// Restores a customer's usage counter after a consumed quota unit turned
+// out not to correspond to an actual generated document (see generatePDF's
+// catch block). Safe to call even if something about the row changed
+// in between — worst case it just re-writes the same value.
+function rollbackQuotaUsage_(rowIndex, previousUsageCount) {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = getSubscriptionSheet_(ss);
+    sheet.getRange(rowIndex, 6).setValue(previousUsageCount);
+  } catch (err) {
+    console.log('rollbackQuotaUsage_ failed:', err);
+  }
 }
 
 // ── Entry point ──────────────────────────────────────────────
@@ -845,6 +866,7 @@ function buildCashReportHTML_(profile, startDate, endDate, rows, totalIncome, to
 // ── PDF Generator ────────────────────────────────────────────
 function generatePDF(formData, lineAuth) {
   let tmpFile = null;
+  let quota = null; // declared here (not inside try) so the catch block below can see it
   try {
     const user = verifyLineUser_(lineAuth);
 
@@ -854,7 +876,7 @@ function generatePDF(formData, lineAuth) {
     if (!formData.docDate)     throw new Error('กรุณาเลือกวันที่ออกเอกสาร');
     if (!formData.items || formData.items.length === 0) throw new Error('กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ');
 
-    const quota = checkAndConsumeQuota_(user.lineUserId);
+    quota = checkAndConsumeQuota_(user.lineUserId);
     if (!quota.allowed) {
       if (quota.reason === 'no_package') {
         return { success: false, upgradeRequired: true, error: 'บัญชีนี้ยังไม่มีแพ็กเกจที่ใช้งานได้ กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง หรือทักแอดมิน' };
@@ -903,6 +925,14 @@ function generatePDF(formData, lineAuth) {
       remainingQuota: quota.remaining
     };
   } catch(e) {
+    // If quota was already consumed (checkAndConsumeQuota_ ran and
+    // succeeded) but something after it failed — Drive error, a bug in
+    // buildDocumentHTML, etc — give the quota unit back. Otherwise a
+    // transient failure silently costs the customer one of their paid
+    // document credits for nothing.
+    if (quota && quota.allowed) {
+      rollbackQuotaUsage_(quota.rowIndex, quota.previousUsageCount);
+    }
     return { success: false, error: e.message || e.toString() };
   } finally {
     if (tmpFile) {
@@ -1200,9 +1230,21 @@ function buildDocumentMenuMessage_() {
 // Entry point LINE calls (routed here from doPost when body.events exists)
 function handleLineWebhook_(body) {
   const events = body.events || [];
+  const cache = CacheService.getScriptCache();
   events.forEach(function(ev) {
     try {
       if (ev.type !== 'message' || ev.message.type !== 'text') return;
+
+      // LINE resends the webhook if our endpoint doesn't respond within its
+      // timeout — a real risk here since a single message can trigger a
+      // Gemini API call plus several Sheets reads/writes. Without this
+      // guard, a slow-but-otherwise-successful request gets replayed and
+      // silently double-logs a pending subscription, double-pushes the
+      // admin notification, or double-consumes a quota unit.
+      const dedupeKey = 'line_evt_' + (ev.webhookEventId || ev.message.id);
+      if (cache.get(dedupeKey)) return;
+      cache.put(dedupeKey, '1', 21600); // 6h — the max CacheService TTL, comfortably past any retry window
+
       const text = ev.message.text;
       const replyToken = ev.replyToken;
       const lineUserId = ev.source && ev.source.userId;
