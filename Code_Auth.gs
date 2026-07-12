@@ -12,7 +12,7 @@ const LINE_LOGIN_CHANNEL_ID = '2010618788';
 // exact bug reported: the bot said "ทักแอดมิน" with no link/ID attached).
 const ADMIN_CONTACT_NAME = 'Longlai intertrade';
 const ADMIN_CONTACT_LINE_ID = '@931btrgh';
-const ADMIN_CONTACT_URL = 'https://page.line.biz/account/@ง่ายผู้ช่วยเอกสาร';
+const ADMIN_CONTACT_URL = 'https://page.line.biz/account/@931btrgh';
 function adminContactBlock_() {
   return '👤 ' + ADMIN_CONTACT_NAME + '\n' + ADMIN_CONTACT_URL + '\n(LINE ID: ' + ADMIN_CONTACT_LINE_ID + ')';
 }
