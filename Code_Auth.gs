@@ -10,7 +10,7 @@ const LINE_LOGIN_CHANNEL_ID = '2010618788';
 // payment isn't automated yet — every "ทักแอดมิน" message the bot sends
 // MUST include this, or the customer has no real next step (this is the
 // exact bug reported: the bot said "ทักแอดมิน" with no link/ID attached).
-const ADMIN_CONTACT_NAME = 'Longlai intertrade';
+const ADMIN_CONTACT_NAME = '@แอดมินง่าย';
 const ADMIN_CONTACT_LINE_ID = '@931btrgh';
 const ADMIN_CONTACT_URL = 'https://page.line.biz/account/@931btrgh';
 function adminContactBlock_() {
@@ -915,9 +915,13 @@ function generatePDF(formData, lineAuth) {
 function saveRecord(data, pdfUrl, user) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    // Use docType (e.g. 'quotation') for sheet name to match getDocHistory, 
-    // but fallback to docTypeName if docType is missing.
-    const sheetName = data.docType || data.docTypeName || 'เอกสาร';
+    // Always the Thai display name (e.g. "ใบเสนอราคา") — this MUST stay
+    // consistent with what's already in the live sheet. A previous edit
+    // briefly changed this to the English docType id ('quotation'), which
+    // would have started splitting every doc type's history across two
+    // differently-named sheet tabs (the old Thai one + a new English one)
+    // the moment someone generated a document — reverted.
+    const sheetName = data.docTypeName || 'เอกสาร';
     let sheet = ss.getSheetByName(sheetName);
     if (!sheet) {
       sheet = ss.insertSheet(sheetName);
@@ -946,15 +950,7 @@ function getDocHistory(docType, lineAuth) {
   try {
     const user = verifyLineUser_(lineAuth);
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    // Try both the key (quotation) and the display name (ใบเสนอราคา)
-    let sheet = ss.getSheetByName(docType);
-    if (!sheet) {
-      const nameMap = {
-        'quotation': 'ใบเสนอราคา', 'po': 'ใบสั่งซื้อ', 'invoice': 'ใบแจ้งหนี้',
-        'receipt': 'ใบเสร็จรับเงิน', 'delivery': 'ใบส่งของ', 'billing': 'ใบวางบิล'
-      };
-      sheet = ss.getSheetByName(nameMap[docType] || docType);
-    }
+    const sheet = ss.getSheetByName(docType); // docType here is actually the Thai display name — see the frontend's call site
     if (!sheet) return [];
     const data = sheet.getDataRange().getValues();
     const result = [];
@@ -1352,7 +1348,7 @@ function askGemini_(userText) {
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   if (!apiKey) return 'ขออภัยค่ะ ระบบ AI ยังไม่ได้ตั้งค่า รบกวนติดต่อผู้ดูแลระบบนะคะ 🙏';
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
   const payload = {
     system_instruction: { parts: [{ text: BOT_SYSTEM_PROMPT_ }] },
     contents: [{ role: 'user', parts: [{ text: userText }] }]
