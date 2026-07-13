@@ -195,7 +195,8 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 .upgrade-box{background:#fff;border:2px solid var(--ink);border-radius:16px;padding:32px 28px;text-align:center;box-shadow:6px 6px 0 var(--ink);max-width:340px;width:90%}
 .upgrade-icon{font-size:40px;margin-bottom:10px}
 .upgrade-title{font-size:18px;font-weight:900;margin-bottom:8px}
-.upgrade-msg{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px}
+.upgrade-msg{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px;white-space:pre-line}
+.upgrade-admin{font-size:12px;color:var(--ink);line-height:1.6;margin-bottom:16px;padding:12px;background:#FAFBF7;border:1.5px solid var(--border);border-radius:var(--r-sm);text-align:left}
 .upgrade-actions{display:flex;flex-direction:column;gap:8px}
 .upgrade-close{margin-top:12px;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline}
 
@@ -259,6 +260,7 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
     <div class="upgrade-icon">🔒</div>
     <div class="upgrade-title">ใช้งานครบโควตาแล้ว</div>
     <div class="upgrade-msg" id="upgradeMsg">คุณใช้งานฟรีครบโควตาแล้ว กรุณาสมัครแพ็กเกจเพื่อใช้งานต่อ</div>
+    <div class="upgrade-admin" id="upgradeAdminInfo">👤 @แอดมินง่าย<br/>https://page.line.biz/account/@931btrgh<br/>(LINE ID: @931btrgh)</div>
     <div class="upgrade-actions">
       <button class="btn btn-primary" onclick="contactAdminForUpgrade()">💬 ทักแอดมินเพื่อสมัครแพ็กเกจ</button>
       <button class="btn btn-accent" onclick="closeUpgradeModal()">ดูภายหลัง</button>
@@ -468,6 +470,9 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 const LIFF_ID='2010618788-8xUdkoqR';
 // TODO: paste your Apps Script Web App /exec URL here (Deploy > Manage deployments)
 const GAS_URL='https://script.google.com/macros/s/AKfycbxBbsLZWyKmbRfY_4FMWLjkkfPtFjxWmtK8pg6VRv4SqUztp5fGaR1vcDdqZeLNz6VM/exec';
+const ADMIN_CONTACT_NAME='@แอดมินง่าย';
+const ADMIN_CONTACT_LINE_ID='@931btrgh';
+const ADMIN_CONTACT_URL='https://page.line.biz/account/@931btrgh';
 
 // Calls the Apps Script backend as a plain HTTP API instead of google.script.run
 // (google.script.run only works when the page itself is served by Apps Script).
@@ -1038,25 +1043,34 @@ function showToast(msg){
 // tier's monthly quota ran out, or a paid package's monthly quota ran out.
 function showUpgradeModal(msg){
   document.getElementById('upgradeMsg').textContent = msg || 'ใช้งานครบโควตาแล้ว กรุณาสมัคร/อัปเกรดแพ็กเกจเพื่อใช้งานต่อ';
+  document.getElementById('upgradeAdminInfo').innerHTML =
+    '👤 ' + escapeHtml(ADMIN_CONTACT_NAME) + '<br/>' +
+    '<a href="' + escapeAttr(ADMIN_CONTACT_URL) + '" target="_blank" rel="noopener">' + escapeHtml(ADMIN_CONTACT_URL) + '</a><br/>' +
+    '(LINE ID: ' + escapeHtml(ADMIN_CONTACT_LINE_ID) + ')';
   document.getElementById('upgradeOverlay').classList.add('show');
 }
 function closeUpgradeModal(){
   document.getElementById('upgradeOverlay').classList.remove('show');
 }
-// Sends the user back to the LINE chat (where the bot can take "แพ็กเกจ"
-// / admin contact from there) if we're inside the LIFF client; otherwise
-// just points them at the chat via a toast.
 function contactAdminForUpgrade(){
   closeUpgradeModal();
-  if(typeof liff!=='undefined' && liff.isInClient && liff.isInClient()){
-    try{ liff.closeWindow(); return; }catch(e){}
+  if(typeof liff!=='undefined' && liff.openWindow){
+    try{
+      liff.openWindow({url:ADMIN_CONTACT_URL, external:false});
+      return;
+    }catch(e){}
   }
-  showToast('พิมพ์ "แพ็กเกจ" ในแชท LINE เพื่อดูรายละเอียดและสมัครได้เลยค่ะ 💕');
+  window.open(ADMIN_CONTACT_URL,'_blank','noopener');
 }
 function initDates(){
   const today=new Date();
   const fmt30=new Date(today.getTime()+30*86400000);
-  const fmtD=function(d){return d.toISOString().split('T')[0];};
+  const fmtD=function(d){
+    const y=d.getFullYear();
+    const m=String(d.getMonth()+1).padStart(2,'0');
+    const day=String(d.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+day;
+  };
   document.getElementById('docDate').value=fmtD(today);
   document.getElementById('extraDate').value=fmtD(fmt30);
   const y=today.getFullYear();
