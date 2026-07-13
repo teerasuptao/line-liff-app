@@ -57,6 +57,25 @@ function isAdmin_(lineUserId) {
   return !!ADMIN_LINE_USER_ID && lineUserId === ADMIN_LINE_USER_ID;
 }
 
+// Google Sheets often auto-coerces "yyyy-MM" into a Date when written to a
+// cell. String(date) then comes back as "Mon Jul 01 2026..." instead of
+// "2026-07", so a strict === check against the current month key silently
+// fails and quota enforcement breaks (always reads usage as 0, or never
+// rolls over correctly). Normalize every read path through this helper.
+function normalizeMonthKey_(value) {
+  if (!value) return '';
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, 'Asia/Bangkok', 'yyyy-MM');
+  }
+  const str = String(value).trim();
+  if (/^\d{4}-\d{2}$/.test(str)) return str;
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, 'Asia/Bangkok', 'yyyy-MM');
+  }
+  return str;
+}
+
 function getPendingSubscriptionSheet_(ss) {
   const headers = ['Timestamp', 'LINE User ID', 'Display Name', 'Requested Package', 'Package ID', 'Status'];
   let sheet = ss.getSheetByName('PendingSubscriptions');
@@ -170,7 +189,7 @@ function activateSubscription_(lineUserId, packageId) {
   const monthKey = Utilities.formatDate(now, 'Asia/Bangkok', 'yyyy-MM');
   const found = findSubscriptionRow_(sheet, lineUserId);
   if (found) {
-    sheet.getRange(found.rowIndex, 1, 1, 7).setValues([[lineUserId, packageId, now, expiry, monthKey, 0, now]]);
+    sheet.getRange('A' + found.rowIndex + ':G' + found.rowIndex).setValues([[lineUserId, packageId, now, expiry, monthKey, 0, now]]);
   } else {
     sheet.appendRow([lineUserId, packageId, now, expiry, monthKey, 0, now]);
   }
@@ -299,8 +318,8 @@ function getUserSubscription_(lineUserId) {
   }
 
   const currentMonthKey = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM');
-  const usageMonthStr = String(usageMonth || '');
-  const count = (usageMonthStr === currentMonthKey) ? Number(usageCount || 0) : 0;
+  const usageMonthKey = normalizeMonthKey_(usageMonth);
+  const count = (usageMonthKey === currentMonthKey) ? Number(usageCount || 0) : 0;
 
   // Already handled above with type safety
 
@@ -371,8 +390,8 @@ function checkAndConsumeQuota_(lineUserId) {
     }
 
     const currentMonthKey = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM');
-    const usageMonth = found.row[4];
-    const usageCount = (usageMonth === currentMonthKey) ? Number(found.row[5] || 0) : 0;
+    const usageMonthKey = normalizeMonthKey_(found.row[4]);
+    const usageCount = (usageMonthKey === currentMonthKey) ? Number(found.row[5] || 0) : 0;
 
     if (pkg.quotaPerMonth !== null && usageCount >= pkg.quotaPerMonth) {
       return {
@@ -578,7 +597,7 @@ function saveCompanyProfile(profile, lineAuth) {
     const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] === user.userKey) {
-        sheet.getRange(i+1, 1, 1, 10).setValues([[
+        sheet.getRange('A' + (i + 1) + ':J' + (i + 1)).setValues([[
           user.userKey,
           user.name,
           user.pictureUrl,
@@ -676,7 +695,7 @@ function saveCustomerFromDoc_(ownerLineUserId, name, address, taxId, branch, pho
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === ownerLineUserId && data[i][1] === name) {
-      sheet.getRange(i + 1, 3, 1, 5).setValues([[address, taxId, branch, phone, new Date()]]);
+      sheet.getRange('C' + (i + 1) + ':G' + (i + 1)).setValues([[address, taxId, branch, phone, new Date()]]);
       return;
     }
   }
@@ -911,16 +930,17 @@ function generatePDF(formData, lineAuth) {
 
     quota = checkAndConsumeQuota_(user.lineUserId);
     if (!quota.allowed) {
+      const adminHint = '\n\n' + adminContactBlock_();
       if (quota.reason === 'no_package') {
-        return { success: false, upgradeRequired: true, error: 'บัญชีนี้ยังไม่มีแพ็กเกจที่ใช้งานได้ กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง หรือทักแอดมิน' };
+        return { success: false, upgradeRequired: true, error: 'บัญชีนี้ยังไม่มีแพ็กเกจที่ใช้งานได้ กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง หรือทักแอดมิน' + adminHint };
       }
       if (quota.reason === 'expired') {
-        return { success: false, upgradeRequired: true, error: 'แพ็ก "' + quota.pkg.name + '" ของคุณหมดอายุแล้ว กรุณาต่ออายุเพื่อใช้งานต่อค่ะ (ทักแอดมินได้เลยนะคะ)' };
+        return { success: false, upgradeRequired: true, error: 'แพ็ก "' + quota.pkg.name + '" ของคุณหมดอายุแล้ว กรุณาต่ออายุเพื่อใช้งานต่อค่ะ' + adminHint };
       }
       if (quota.reason === 'free_quota_exceeded') {
-        return { success: false, upgradeRequired: true, error: 'ใช้งานฟรีครบ ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนแล้ว สมัครแพ็กเริ่มต้นเพียง 59 บาท/เดือน เพื่อใช้งานต่อได้เลยค่ะ' };
+        return { success: false, upgradeRequired: true, error: 'ใช้งานฟรีครบ ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนแล้ว สมัครแพ็กเริ่มต้นเพียง 59 บาท/เดือน เพื่อใช้งานต่อได้เลยค่ะ' + adminHint };
       }
-      return { success: false, upgradeRequired: true, error: 'ใช้งานครบโควตา ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนของแพ็ก "' + quota.pkg.name + '" แล้ว กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานต่อ' };
+      return { success: false, upgradeRequired: true, error: 'ใช้งานครบโควตา ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนของแพ็ก "' + quota.pkg.name + '" แล้ว กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานต่อ' + adminHint };
     }
 
     const html = buildDocumentHTML(formData);
@@ -948,7 +968,10 @@ function generatePDF(formData, lineAuth) {
     );
     
     if (formData.docType === 'receipt') {
-      importReceiptAsIncome_(user.lineUserId, formData);
+      const sub = getUserSubscription_(user.lineUserId);
+      if (sub && !sub.expired && sub.pkg.hasTax) {
+        importReceiptAsIncome_(user.lineUserId, formData);
+      }
     }
     
     return {
@@ -1259,7 +1282,13 @@ const KEYWORD_REPLIES_ = [
 function findKeywordReply_(text) {
   const lower = (text || '').toLowerCase();
   return KEYWORD_REPLIES_.find(function(k) {
-    return k.keywords.some(function(kw) { return lower.indexOf(kw.toLowerCase()) > -1; });
+    return k.keywords.some(function(kw) {
+      const needle = kw.toLowerCase();
+      if (needle === 'po') {
+        return /(?:^|[^a-z\u0E00-\u0E7F])po(?:[^a-z\u0E00-\u0E7F]|$)/i.test(lower);
+      }
+      return lower.indexOf(needle) > -1;
+    });
   }) || null;
 }
 
@@ -1304,15 +1333,14 @@ function handleLineWebhook_(body) {
         replyMessages = adminApproveReply;
       } else if (isWhoAmIQuery_(text)) {
         replyMessages = [{ type: 'text', text: 'LINE User ID ของคุณคือ:\n' + lineUserId }];
+      } else if (isPackageInfoQuery_(text)) {
+        replyMessages = [{ type: 'text', text: buildPackageInfoMessage_() }];
       } else if (isSubscribeIntentQuery_(text)) {
-        // [Fix] Check subscribe intent BEFORE general document menu to catch "สมัคร" correctly
         replyMessages = buildSubscribeReply_(text, lineUserId);
       } else if (match) {
         replyMessages = [{ type: 'text', text: '👉 ' + match.label + '\nกดลิงก์นี้เพื่อเริ่มได้เลยค่ะ 💕\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + match.type }];
       } else if (isMenuQuery_(text)) {
         replyMessages = [{ type: 'text', text: buildDocumentMenuMessage_() }];
-      } else if (isPackageInfoQuery_(text)) {
-        replyMessages = [{ type: 'text', text: buildPackageInfoMessage_() }];
       } else if (isTaxFeatureQuery_(text)) {
         replyMessages = [{ type: 'text', text: buildTaxFeatureMessage_(lineUserId) }];
       } else {
@@ -1368,8 +1396,7 @@ function isPackageInfoQuery_(text) {
 // actually sign up. These broader subscribe/pay phrases catch that case.
 function isSubscribeIntentQuery_(text) {
   const lower = (text || '').trim().toLowerCase();
-  // [Fix] Add "สมัคร" as a standalone keyword and cover "สมัครแพ็คโปร" etc.
-  // We use regex or a more flexible check to ensure "สมัคร" alone works.
+  if (isPackageInfoQuery_(text)) return false;
   const keywords = [
     'สมัคร', 'สมัครที่ไหน', 'สมัครยังไง', 'สมัครแบบไหน', 'จะสมัคร', 'อยากสมัคร', 'สนใจสมัคร',
     'อัปเกรด', 'อัพเกรด', 'อยากอัปเกรด',
@@ -1384,11 +1411,11 @@ function isSubscribeIntentQuery_(text) {
 // number elsewhere in the message (a date, a quantity) can't misfire.
 function resolvePackageChoice_(text) {
   const lower = (text || '').toLowerCase();
-  // [Fix] Better matching for package names to avoid missing "สมัครแพ็คโปร"
-  if (lower.indexOf('พรีเมียม') > -1 || lower.indexOf('premium') > -1 || lower.indexOf('249') > -1) return PACKAGES.premium249;
-  if (lower.indexOf('โปร') > -1 || lower.indexOf('pro') > -1 || lower.indexOf('149') > -1) return PACKAGES.pro149;
-  if (lower.indexOf('เริ่มต้น') > -1 || lower.indexOf('starter') > -1 || lower.indexOf('59') > -1) return PACKAGES.starter59;
-  
+  if (lower.indexOf('พรีเมียม') > -1 || lower.indexOf('premium') > -1 || /(?:^|[^0-9])249(?:[^0-9]|$)/.test(lower)) return PACKAGES.premium249;
+  if (lower.indexOf('แพ็คโปร') > -1 || lower.indexOf('แพ็กโปร') > -1 || lower.indexOf('แพคโปร') > -1 ||
+      /(?:^|[^a-z])pro(?:[^a-z]|$)/i.test(lower) || /(?:^|[^0-9])149(?:[^0-9]|$)/.test(lower)) return PACKAGES.pro149;
+  if (lower.indexOf('เริ่มต้น') > -1 || lower.indexOf('starter') > -1 || /(?:^|[^0-9])59(?:[^0-9]|$)/.test(lower)) return PACKAGES.starter59;
+
   const m = lower.match(/แพ็?[คก]\s*([123])/);
   if (m) {
     if (m[1] === '3') return PACKAGES.premium249;
