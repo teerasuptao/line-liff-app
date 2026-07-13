@@ -334,39 +334,72 @@ function createFreeTrialRow_(sheet, lineUserId) {
 // Checks quota and, if allowed, increments usage for this month.
 // Call this right before generating a document.
 function checkAndConsumeQuota_(lineUserId) {
-  const sub = getUserSubscription_(lineUserId);
-  // Only reachable if the sheet has a genuinely unknown/typo'd package id
-  // (free tier auto-enrolls every user — see getUserSubscription_).
-  if (!sub) {
+  // Step 1 (unlocked): make sure a subscription row exists at all.
+  // getUserSubscription_ auto-provisions a "free" row for brand-new users
+  // via createFreeTrialRow_, which takes its OWN script lock internally.
+  // We deliberately do this BEFORE taking our own lock in step 2 so we
+  // never nest two script locks within the same call chain — Apps
+  // Script's LockService isn't documented as safely reentrant, and
+  // nesting them here would risk a real deadlock on every brand-new
+  // user's very first document attempt.
+  const ensured = getUserSubscription_(lineUserId);
+  if (!ensured) {
     return { allowed: false, reason: 'no_package' };
   }
-  if (sub.expired) {
-    return { allowed: false, reason: 'expired', pkg: sub.pkg };
-  }
-  if (sub.pkg.quotaPerMonth !== null && sub.usageCount >= sub.pkg.quotaPerMonth) {
+
+  // Step 2 (locked): the actual check-and-increment, done as one atomic
+  // unit by re-reading the row FRESH inside the lock rather than trusting
+  // the values from step 1. Two near-simultaneous requests for the same
+  // user (double-tap the button, two open tabs) would otherwise both read
+  // the same usageCount before either writes the incremented value back —
+  // a classic lost-update race letting someone squeeze out more documents
+  // than their quota allows.
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = getSubscriptionSheet_(ss);
+    const found = findSubscriptionRow_(sheet, lineUserId);
+    if (!found) return { allowed: false, reason: 'no_package' }; // defensive; shouldn't happen given step 1
+
+    const packageId = found.row[1];
+    const expiryDate = found.row[3];
+    const pkg = PACKAGES[packageId];
+    if (!pkg) return { allowed: false, reason: 'no_package' };
+    if (packageId !== 'free' && expiryDate && new Date(expiryDate) < new Date()) {
+      return { allowed: false, reason: 'expired', pkg: pkg };
+    }
+
+    const currentMonthKey = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM');
+    const usageMonth = found.row[4];
+    const usageCount = (usageMonth === currentMonthKey) ? Number(found.row[5] || 0) : 0;
+
+    if (pkg.quotaPerMonth !== null && usageCount >= pkg.quotaPerMonth) {
+      return {
+        allowed: false,
+        reason: (pkg.id === 'free') ? 'free_quota_exceeded' : 'quota_exceeded',
+        pkg: pkg
+      };
+    }
+
+    sheet.getRange(found.rowIndex, 5).setValue(currentMonthKey);   // Usage Month
+    sheet.getRange(found.rowIndex, 6).setValue(usageCount + 1);    // Usage Count
+    sheet.getRange(found.rowIndex, 7).setValue(new Date());        // Last Updated
     return {
-      allowed: false,
-      reason: (sub.pkg.id === 'free') ? 'free_quota_exceeded' : 'quota_exceeded',
-      pkg: sub.pkg
+      allowed: true,
+      pkg: pkg,
+      remaining: pkg.quotaPerMonth !== null ? (pkg.quotaPerMonth - usageCount - 1) : null,
+      // For rollbackQuotaUsage_ below — quota is consumed here, BEFORE we know
+      // the PDF actually gets generated successfully. If Drive/PDF creation
+      // fails afterward (storage full, transient error), the caller should
+      // roll this back so the customer isn't charged a quota unit for a
+      // document that was never actually produced.
+      rowIndex: found.rowIndex,
+      previousUsageCount: usageCount
     };
+  } finally {
+    lock.releaseLock();
   }
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = getSubscriptionSheet_(ss);
-  sheet.getRange(sub.rowIndex, 5).setValue(sub.usageMonth);      // Usage Month
-  sheet.getRange(sub.rowIndex, 6).setValue(sub.usageCount + 1);  // Usage Count
-  sheet.getRange(sub.rowIndex, 7).setValue(new Date());          // Last Updated
-  return {
-    allowed: true,
-    pkg: sub.pkg,
-    remaining: sub.pkg.quotaPerMonth !== null ? (sub.pkg.quotaPerMonth - sub.usageCount - 1) : null,
-    // For rollbackQuotaUsage_ below — quota is consumed here, BEFORE we know
-    // the PDF actually gets generated successfully. If Drive/PDF creation
-    // fails afterward (storage full, transient error), the caller should
-    // roll this back so the customer isn't charged a quota unit for a
-    // document that was never actually produced.
-    rowIndex: sub.rowIndex,
-    previousUsageCount: sub.usageCount
-  };
 }
 
 // Restores a customer's usage counter after a consumed quota unit turned
@@ -1004,13 +1037,26 @@ function getDocHistory(docType, lineAuth) {
 }
 
 // ── Calculations ──────────────────────────────────────────────
+// Safe numeric parse — parseFloat(x || 0) alone still returns NaN for any
+// non-numeric truthy string (e.g. item.qty === "abc"), and NaN then poisons
+// every downstream sum (NaN propagates through +, and Math.max(NaN, 0) is
+// itself NaN, not 0). Normally the frontend's own getItems() already only
+// sends clean numbers, but this endpoint is a public HTTP API — a direct
+// call bypassing the frontend could send anything. Without this guard, a
+// single bad value would silently turn a real customer's invoice total
+// into the literal text "NaN บาท" on a professional document.
+function toNum_(v) {
+  const n = parseFloat(v);
+  return isNaN(n) ? 0 : n;
+}
+
 function calcTotal(data) {
   const items = data.items || [];
   let subtotal = 0;
   items.forEach(function(item) {
-    const qty   = parseFloat(item.qty   || 0);
-    const price = parseFloat(item.price || 0);
-    const disc  = parseFloat(item.discount || 0);
+    const qty   = toNum_(item.qty);
+    const price = toNum_(item.price);
+    const disc  = toNum_(item.discount);
     subtotal += Math.max((qty * price) - disc, 0);
   });
   const vatAmt = data.includeVat ? Math.round(subtotal * 7) / 100 : 0;
@@ -1080,7 +1126,7 @@ function buildDocumentHTML(d) {
   const sub = totals.subtotal, vatAmt = totals.vat, total = totals.grand;
   const amountInWords = numberToThaiText(total);
   const rows = (d.items||[]).map(function(item,idx) {
-    const qty=parseFloat(item.qty||0), price=parseFloat(item.price||0), disc=parseFloat(item.discount||0);
+    const qty=toNum_(item.qty), price=toNum_(item.price), disc=toNum_(item.discount);
     const lineTotal=Math.max((qty*price)-disc, 0);
     return '<tr>'
       +'<td class="tc">'+(idx+1)+'</td>'
@@ -1275,7 +1321,26 @@ function handleLineWebhook_(body) {
 
       replyMessagesToLine_(replyToken, replyMessages);
     } catch (err) {
-      // Swallow errors per-event so one bad event doesn't break the whole webhook batch.
+      // Previously this just swallowed the error entirely — one bad event
+      // wouldn't break the whole webhook batch, which is correct, but it
+      // also meant the customer got ZERO reply with zero signal anything
+      // went wrong (looks exactly like the bot silently hung). Try to at
+      // least tell them something broke, using the reply token if it's
+      // still valid — LINE reply tokens expire quickly (~1 minute) and
+      // work once only, so this best-effort send is itself wrapped in its
+      // own try/catch to make sure a failure here still can't break the
+      // batch loop.
+      console.log('handleLineWebhook_ event error:', err);
+      try {
+        if (ev.replyToken) {
+          replyMessagesToLine_(ev.replyToken, [{
+            type: 'text',
+            text: 'ขออภัยค่ะ ระบบขัดข้องชั่วคราว รบกวนลองใหม่อีกครั้งนะคะ 🙏'
+          }]);
+        }
+      } catch (notifyErr) {
+        console.log('handleLineWebhook_ fallback reply also failed:', notifyErr);
+      }
     }
   });
   return ContentService.createTextOutput(JSON.stringify({ ok: true }))
