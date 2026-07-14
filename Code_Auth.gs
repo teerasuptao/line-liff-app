@@ -19,7 +19,7 @@
 //      Don't create any tabs yourself — the script creates
 //      Subscriptions / Customers / PendingSubscriptions / etc. on first use.
 //   2. Look at the sheet's URL in the address bar. It looks like:
-//      https://docs.google.com/spreadsheets/d/THIS_LONG_ID_HERE/edit
+//      https://docs.google.com/spreadsheets/d/1MfjpYHusqYiVMM7hSDaMSOAjczb6s5tiQGX0gZlxYac/edit?gid=0#gid=0
 //   3. Copy THIS_LONG_ID_HERE (everything between "/d/" and "/edit") and
 //      paste it as the value below, replacing the placeholder text.
 const SPREADSHEET_ID = '1MfjpYHusqYiVMM7hSDaMSOAjczb6s5tiQGX0gZlxYac';
