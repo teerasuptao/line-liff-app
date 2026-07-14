@@ -22,7 +22,7 @@
 //      https://docs.google.com/spreadsheets/d/THIS_LONG_ID_HERE/edit
 //   3. Copy THIS_LONG_ID_HERE (everything between "/d/" and "/edit") and
 //      paste it as the value below, replacing the placeholder text.
-const SPREADSHEET_ID = '1MfjpYHusqYiVMM7hSDaMSOAjczb6s5tiQGX0gZlxYac/edit?gid=0#gid=0';
+const SPREADSHEET_ID = '1MfjpYHusqYiVMM7hSDaMSOAjczb6s5tiQGX0gZlxYac';
 const LINE_LOGIN_CHANNEL_ID = '2010618788';
 
 // Where a customer actually goes to subscribe/upgrade/pay right now, since
