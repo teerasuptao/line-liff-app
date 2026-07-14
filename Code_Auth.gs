@@ -3,7 +3,26 @@
 // Features: LIFF Login + Company Profile + All 6 Documents
 // ============================================================
 
-const SPREADSHEET_ID = '1ckKnGRcZS7RLu2qftr3WpdmDYSH4HR6oxioe3fTYH3g';
+// ============================================================
+// ⚠️⚠️⚠️ SETUP REQUIRED — ต้องแก้ก่อนใช้งานบนบัญชี ngailinebot ⚠️⚠️⚠️
+// ============================================================
+// This currently points at the OLD spreadsheet living in the Longlai
+// intertrade Google account's Drive. Deploying this script under the
+// ngailinebot account WITHOUT changing this constant means the script
+// still tries to read/write the OLD sheet — which will either fail with a
+// permission error (ngailinebot doesn't own it and it isn't shared), or
+// worse, silently keep writing production data into the old test account.
+//
+// How to get the correct value:
+//   1. While logged into ngailinebot@gmail.com, create a new blank Google
+//      Sheet (File > New > Google Sheets, or from sheets.google.com).
+//      Don't create any tabs yourself — the script creates
+//      Subscriptions / Customers / PendingSubscriptions / etc. on first use.
+//   2. Look at the sheet's URL in the address bar. It looks like:
+//      https://docs.google.com/spreadsheets/d/THIS_LONG_ID_HERE/edit
+//   3. Copy THIS_LONG_ID_HERE (everything between "/d/" and "/edit") and
+//      paste it as the value below, replacing the placeholder text.
+const SPREADSHEET_ID = '1MfjpYHusqYiVMM7hSDaMSOAjczb6s5tiQGX0gZlxYac/edit?gid=0#gid=0';
 const LINE_LOGIN_CHANNEL_ID = '2010618788';
 
 // Where a customer actually goes to subscribe/upgrade/pay right now, since
@@ -12,7 +31,12 @@ const LINE_LOGIN_CHANNEL_ID = '2010618788';
 // exact bug reported: the bot said "ทักแอดมิน" with no link/ID attached).
 const ADMIN_CONTACT_NAME = '@แอดมินง่าย';
 const ADMIN_CONTACT_LINE_ID = '@931btrgh';
-const ADMIN_CONTACT_URL = 'https://page.line.biz/account/@931btrgh';
+// https://page.line.biz/account/... is the LINE Official Account MANAGER
+// page — it requires an admin login and is useless to a customer (this was
+// the actual bug reported: customers tapping it hit a login wall). The
+// correct customer-facing link is LINE's "add friend" URL scheme, which
+// opens the LINE app directly to add/chat with this OA — no login needed.
+const ADMIN_CONTACT_URL = 'https://line.me/R/ti/p/@931btrgh';
 function adminContactBlock_() {
   return '👤 ' + ADMIN_CONTACT_NAME + '\n' + ADMIN_CONTACT_URL + '\n(LINE ID: ' + ADMIN_CONTACT_LINE_ID + ')';
 }
@@ -435,15 +459,33 @@ function rollbackQuotaUsage_(rowIndex, previousUsageCount) {
   }
 }
 
+// Catches the #1 most likely deploy mistake when setting this up under a
+// new Google account: forgetting to replace SPREADSHEET_ID above. Without
+// this check, SpreadsheetApp.openById() on the placeholder text throws a
+// generic, confusing "Invalid argument" error that gives no clue what's
+// actually wrong. This gives a plain-language answer instead.
+function assertConfigured_() {
+  if (SPREADSHEET_ID === 'PASTE_NEW_NGAILINEBOT_SPREADSHEET_ID_HERE') {
+    throw new Error('ยังไม่ได้ตั้งค่า SPREADSHEET_ID — เปิด Code_Auth.gs แล้วใส่ Spreadsheet ID จริงที่บรรทัดบนสุดของไฟล์ก่อนใช้งาน');
+  }
+}
+
 // ── Entry point ──────────────────────────────────────────────
 // NOTE: The LIFF frontend is now hosted OUTSIDE Apps Script (e.g. GitHub
 // Pages) to avoid the iframe-wrapping issue that blocks liff.login().
 // doGet is kept only as a fallback / health check — it is no longer the
 // page the LIFF endpoint URL points to.
 function doGet(e) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ ok: true, message: 'CHUAY backend is running' }))
-    .setMimeType(ContentService.MimeType.JSON);
+  try {
+    assertConfigured_();
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: true, message: 'CHUAY backend is running' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 // ── API router (called via fetch() from the externally-hosted frontend) ──
@@ -468,6 +510,13 @@ function doPost(e) {
   // JSON.parse below throws.
   if (!e || !e.postData || !e.postData.contents) {
     return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  try {
+    assertConfigured_();
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -855,7 +904,7 @@ function generateCashReportPDF(reportData, lineAuth) {
 
     const html = buildCashReportHTML_(profile, reportData.startDate, reportData.endDate, rows, totalIncome, totalGoods, totalOther);
 
-    const folder = DriveApp.getRootFolder();
+    const folder = getOutputFolder_();
     const tmpBlob = Utilities.newBlob(html, 'text/html', 'tmp_report.html');
     tmpFile = folder.createFile(tmpBlob);
     const pdfBlob = tmpFile.getAs('application/pdf');
@@ -944,7 +993,7 @@ function generatePDF(formData, lineAuth) {
     }
 
     const html = buildDocumentHTML(formData);
-    const folder = DriveApp.getRootFolder();
+    const folder = getOutputFolder_();
     const tmpBlob = Utilities.newBlob(html, 'text/html', 'tmp.html');
     tmpFile = folder.createFile(tmpBlob);
     const pdfBlob = tmpFile.getAs('application/pdf');
@@ -1084,6 +1133,19 @@ function calcTotal(data) {
   });
   const vatAmt = data.includeVat ? Math.round(subtotal * 7) / 100 : 0;
   return { subtotal: subtotal, vat: vatAmt, grand: subtotal + vatAmt };
+}
+
+// All generated PDFs go into ONE dedicated folder instead of straight into
+// Drive root — keeps things findable as volume grows, and makes it obvious
+// exactly what needs to move if this script is ever redeployed under a
+// different Google account (e.g. moving from a personal Drive to a
+// dedicated business account's Drive): just this one folder, not files
+// scattered across root. Created once, then reused (get-or-create).
+function getOutputFolder_() {
+  const FOLDER_NAME = 'ง่าย ผู้ช่วยเอกสาร - ไฟล์เอกสาร';
+  const existing = DriveApp.getFoldersByName(FOLDER_NAME);
+  if (existing.hasNext()) return existing.next();
+  return DriveApp.createFolder(FOLDER_NAME);
 }
 
 function makeSafeFileName_(name) {
@@ -1299,7 +1361,8 @@ function buildDocumentMenuMessage_() {
   const lines = KEYWORD_REPLIES_.map(function(k) {
     return '📄 ' + k.label + '\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + k.type;
   });
-  return 'หนูสามารถทำเอกสารได้ดังนี้ค่ะ 🌸\n\n' + lines.join('\n\n');
+  return 'หนูสามารถทำเอกสารได้ดังนี้ค่ะ 🌸\n\n' + lines.join('\n\n') +
+    '\n\n✨ ใช้ฟรีได้ 5 ครั้ง/เดือนเลยค่ะ ถ้าอยากสร้างได้ไม่จำกัดหรืออยากได้ระบบทำบัญชี/ยื่นภาษี พิมพ์ "แพ็กเกจ" ดูรายละเอียดได้เลยนะคะ 💕';
 }
 
 // Entry point LINE calls (routed here from doPost when body.events exists)
