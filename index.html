@@ -260,7 +260,7 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
     <div class="upgrade-icon">🔒</div>
     <div class="upgrade-title">ใช้งานครบโควตาแล้ว</div>
     <div class="upgrade-msg" id="upgradeMsg">คุณใช้งานฟรีครบโควตาแล้ว กรุณาสมัครแพ็กเกจเพื่อใช้งานต่อ</div>
-    <div class="upgrade-admin" id="upgradeAdminInfo">👤 @แอดมินง่าย<br/>https://page.line.biz/account/@931btrgh<br/>(LINE ID: @931btrgh)</div>
+    <div class="upgrade-admin" id="upgradeAdminInfo">👤 @แอดมินง่าย<br/>https://line.me/R/ti/p/@931btrgh<br/>(LINE ID: @931btrgh)</div>
     <div class="upgrade-actions">
       <button class="btn btn-primary" onclick="contactAdminForUpgrade()">💬 ทักแอดมินเพื่อสมัครแพ็กเกจ</button>
       <button class="btn btn-accent" onclick="closeUpgradeModal()">ดูภายหลัง</button>
@@ -468,17 +468,30 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 <script>
 // ── Config ────────────────────────────────────────────────────
 const LIFF_ID='2010618788-8xUdkoqR';
-// TODO: paste your Apps Script Web App /exec URL here (Deploy > Manage deployments)
-const GAS_URL='https://script.google.com/macros/s/AKfycbxBbsLZWyKmbRfY_4FMWLjkkfPtFjxWmtK8pg6VRv4SqUztp5fGaR1vcDdqZeLNz6VM/exec';
+// ⚠️⚠️⚠️ SETUP REQUIRED — ต้องแก้ก่อนใช้งานบนบัญชี ngailinebot ⚠️⚠️⚠️
+// This currently points at the OLD Apps Script deployment under the
+// Longlai intertrade Google account. It WILL NOT reach the new backend
+// running under ngailinebot until this is replaced.
+//
+// How to get the correct value:
+//   1. In the Apps Script editor (logged into ngailinebot@gmail.com),
+//      after pasting in Code_Auth.gs: Deploy > New deployment > Web app.
+//   2. After deploying, copy the URL shown — it ends in "/exec" and looks
+//      like: https://script.google.com/macros/s/AKfycb.../exec
+//   3. Paste it below, replacing the placeholder text between the quotes.
+const GAS_URL='https://script.google.com/macros/s/AKfycbzEBPEnE3CiUIY5IduWKBdpmQCd8jn63QvOHa-galDLmJC4IFnk59naHrPjemgOOy7l/exec';
 const ADMIN_CONTACT_NAME='@แอดมินง่าย';
 const ADMIN_CONTACT_LINE_ID='@931btrgh';
-const ADMIN_CONTACT_URL='https://page.line.biz/account/@931btrgh';
+const ADMIN_CONTACT_URL='https://line.me/R/ti/p/@931btrgh';
 
 // Calls the Apps Script backend as a plain HTTP API instead of google.script.run
 // (google.script.run only works when the page itself is served by Apps Script).
 // Uses text/plain content-type to avoid a CORS preflight (OPTIONS) request,
 // which Apps Script Web Apps do not handle.
 function callServer(action,payload){
+  if(GAS_URL.indexOf('PASTE_NEW_NGAILINEBOT')===0){
+    return Promise.resolve({success:false,error:'ยังไม่ได้ตั้งค่า GAS_URL — แก้ค่านี้ในไฟล์ App_1_1.html ก่อนใช้งาน (ดูคอมเมนต์เหนือตัวแปรนี้)'});
+  }
   return fetch(GAS_URL,{
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
