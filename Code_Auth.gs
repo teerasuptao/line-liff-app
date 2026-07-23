@@ -1410,24 +1410,38 @@ function handleLineWebhook_(body) {
         replyMessages = [{ type: 'text', text: handleAiOrUpsell_(text, lineUserId) }];
       }
 
-      replyMessagesToLine_(replyToken, replyMessages);
+      const replySucceeded = replyMessagesToLine_(replyToken, replyMessages);
+      // Reply tokens expire after ~1 minute and work once only — if a slow
+      // step upstream (Gemini, Sheets I/O) ate that minute, the reply call
+      // above fails. Previously that failure was swallowed with nothing
+      // else attempted, which is indistinguishable from the bot just not
+      // responding at all. Push doesn't need a reply token, only the
+      // customer's LINE user ID (which we already have), so it can recover
+      // the message in exactly this situation.
+      if (!replySucceeded && lineUserId) {
+        console.log('reply failed, falling back to push for', lineUserId);
+        pushToLine_(lineUserId, replyMessages);
+      }
     } catch (err) {
       // Previously this just swallowed the error entirely — one bad event
       // wouldn't break the whole webhook batch, which is correct, but it
       // also meant the customer got ZERO reply with zero signal anything
       // went wrong (looks exactly like the bot silently hung). Try to at
-      // least tell them something broke, using the reply token if it's
-      // still valid — LINE reply tokens expire quickly (~1 minute) and
-      // work once only, so this best-effort send is itself wrapped in its
-      // own try/catch to make sure a failure here still can't break the
-      // batch loop.
+      // least tell them something broke — first via reply token if it's
+      // still valid, and if that fails too, via push — using the reply
+      // token if it's still valid — LINE reply tokens expire quickly (~1
+      // minute) and work once only, so this best-effort send is itself
+      // wrapped in its own try/catch to make sure a failure here still
+      // can't break the batch loop.
       console.log('handleLineWebhook_ event error:', err);
       try {
+        const errText = 'อ๊ะ ระบบสะดุดนิดหน่อยค่ะ 😅 รบกวนลองพิมพ์อีกทีนะคะ';
+        let sent = false;
         if (ev.replyToken) {
-          replyMessagesToLine_(ev.replyToken, [{
-            type: 'text',
-            text: 'อ๊ะ ระบบสะดุดนิดหน่อยค่ะ 😅 รบกวนลองพิมพ์อีกทีนะคะ'
-          }]);
+          sent = replyMessagesToLine_(ev.replyToken, [{ type: 'text', text: errText }]);
+        }
+        if (!sent && ev.source && ev.source.userId) {
+          pushToLine_(ev.source.userId, [{ type: 'text', text: errText }]);
         }
       } catch (notifyErr) {
         console.log('handleLineWebhook_ fallback reply also failed:', notifyErr);
@@ -1578,9 +1592,12 @@ function replyToLine_(replyToken, text) {
 // reply can include e.g. a text message plus a QR-code image message (used
 // by the subscribe flow below — LINE's reply API supports up to 5 messages
 // per reply token).
+// Returns true if LINE accepted the reply (2xx), false otherwise — callers
+// use this to fall back to a push message (see handleLineWebhook_) instead
+// of silently doing nothing when the reply fails.
 function replyMessagesToLine_(replyToken, messages) {
   const token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
-  if (!token) { console.log('LINE_CHANNEL_ACCESS_TOKEN is missing!'); return; }
+  if (!token) { console.log('LINE_CHANNEL_ACCESS_TOKEN is missing!'); return false; }
   try {
     const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'post',
@@ -1589,9 +1606,12 @@ function replyMessagesToLine_(replyToken, messages) {
       payload: JSON.stringify({ replyToken: replyToken, messages: messages }),
       muteHttpExceptions: true
     });
-    console.log('LINE reply status:', res.getResponseCode(), res.getContentText());
+    const code = res.getResponseCode();
+    console.log('LINE reply status:', code, res.getContentText());
+    return code >= 200 && code < 300;
   } catch (err) {
     console.log('replyMessagesToLine_ error:', err);
+    return false;
   }
 }
 
@@ -1602,7 +1622,7 @@ function replyMessagesToLine_(replyToken, messages) {
 function pushToLine_(toUserId, messages) {
   try {
     const token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
-    if (!token || !toUserId) return;
+    if (!token || !toUserId) return false;
     const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
       method: 'post',
       contentType: 'application/json',
@@ -1610,9 +1630,12 @@ function pushToLine_(toUserId, messages) {
       payload: JSON.stringify({ to: toUserId, messages: messages }),
       muteHttpExceptions: true
     });
-    console.log('LINE push status:', res.getResponseCode(), res.getContentText());
+    const code = res.getResponseCode();
+    console.log('LINE push status:', code, res.getContentText());
+    return code >= 200 && code < 300;
   } catch (err) {
     console.log('pushToLine_ error:', err);
+    return false;
   }
 }
 
