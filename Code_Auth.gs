@@ -196,7 +196,7 @@ function tryHandleAdminApprove_(text, lineUserId) {
 
   pushToLine_(customerLineUserId, [{
     type: 'text',
-    text: '🎉 เปิดใช้งานแพ็ก "' + pkg.name + '" ให้เรียบร้อยแล้วค่ะ ขอบคุณที่ใช้บริการนะคะ 💕'
+    text: '🎉 เปิดแพ็ก "' + pkg.name + '" ให้เรียบร้อยแล้วนะคะ พร้อมลุยทำเอกสารกันต่อได้เลย! ขอบคุณที่ไว้ใจให้ "ง่าย" ช่วยงานนะคะ 💕'
   }]);
 
   return [{ type: 'text', text: '✅ เปิดใช้งานแพ็ก "' + pkg.name + '" ให้ ' + customerName + ' เรียบร้อยแล้วค่ะ' }];
@@ -235,8 +235,8 @@ function buildSubscribeReply_(text, lineUserId) {
   if (chosen) {
     const displayName = getLineDisplayName_(lineUserId);
     logPendingSubscription_(lineUserId, displayName, chosen);
-    let msg = '✅ รับคำขอสมัคร "' + chosen.name + '" (' + chosen.price + ' บาท/เดือน) แล้วนะคะ 🌸\n\n' +
-      'กรุณาโอนเงิน ' + chosen.price + ' บาท ตามช่องทางด้านล่าง แล้วส่งสลิปให้แอดมินเพื่อยืนยันการเปิดใช้งานค่ะ\n\n' +
+    let msg = '✅ รับเรื่องแล้วค่ะ! แพ็ก "' + chosen.name + '" (' + chosen.price + ' บาท/เดือน) ใช่ไหมคะ 🌸\n\n' +
+      'โอนเงิน ' + chosen.price + ' บาท ตามช่องทางด้านล่างนี้ได้เลยค่ะ แล้วส่งสลิปให้แอดมินหน่อยนะคะ เดี๋ยวเปิดให้ไวๆ (ยกเว้นแอดมินเผลอไปกินข้าวเที่ยงอยู่ 😆)\n\n' +
       bankTransferBlock_() +
       (PAYMENT_QR_IMAGE_URL ? '\n\n(หรือสแกน QR ที่แนบด้านล่างนี้ก็ได้ค่ะ)' : '') +
       '\n\n' + adminContactBlock_();
@@ -250,7 +250,7 @@ function buildSubscribeReply_(text, lineUserId) {
   }
   return [{
     type: 'text',
-    text: buildPackageInfoMessage_() + '\n\nพิมพ์ชื่อแพ็กที่สนใจ (เช่น "สมัครแพ็คโปร") เพื่อแจ้งความประสงค์ได้เลยค่ะ 🌸'
+    text: buildPackageInfoMessage_() + '\n\nอยากได้แพ็กไหน พิมพ์ชื่อมาบอกหนูได้เลยค่ะ (เช่น "สมัครแพ็คโปร") 🌸'
   }];
 }
 
@@ -268,11 +268,11 @@ function buildSubscribeReply_(text, lineUserId) {
 const PACKAGES = {
   free: {
     id: 'free', name: 'ทดลองใช้ฟรี', price: 0,
-    quotaPerMonth: 5, hasAI: false, hasTax: false
+    quotaPerMonth: 30, hasAI: false, hasTax: false
   },
   starter59: {
     id: 'starter59', name: 'แพ็คเริ่มต้น', price: 59,
-    quotaPerMonth: 30, hasAI: false, hasTax: false
+    quotaPerMonth: 100, hasAI: false, hasTax: false
   },
   pro149: {
     id: 'pro149', name: 'แพ็คโปร', price: 149,
@@ -981,15 +981,15 @@ function generatePDF(formData, lineAuth) {
     if (!quota.allowed) {
       const adminHint = '\n\n' + adminContactBlock_();
       if (quota.reason === 'no_package') {
-        return { success: false, upgradeRequired: true, error: 'บัญชีนี้ยังไม่มีแพ็กเกจที่ใช้งานได้ กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง หรือทักแอดมิน' + adminHint };
+        return { success: false, upgradeRequired: true, error: 'อุ๊ย ระบบหาแพ็กเกจของบัญชีนี้ไม่เจอค่ะ ลองล็อกอินใหม่อีกทีนะคะ ถ้ายังไม่ได้ทักแอดมินมาได้เลยค่ะ' + adminHint };
       }
       if (quota.reason === 'expired') {
-        return { success: false, upgradeRequired: true, error: 'แพ็ก "' + quota.pkg.name + '" ของคุณหมดอายุแล้ว กรุณาต่ออายุเพื่อใช้งานต่อค่ะ' + adminHint };
+        return { success: false, upgradeRequired: true, error: 'แพ็ก "' + quota.pkg.name + '" หมดอายุแล้วค่ะ (เวลาผ่านไปไวเนอะ 😅) ต่ออายุนิดเดียวก็ใช้งานต่อได้เลยนะคะ' + adminHint };
       }
       if (quota.reason === 'free_quota_exceeded') {
-        return { success: false, upgradeRequired: true, error: 'ใช้งานฟรีครบ ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนแล้ว สมัครแพ็กเริ่มต้นเพียง 59 บาท/เดือน เพื่อใช้งานต่อได้เลยค่ะ' + adminHint };
+        return { success: false, upgradeRequired: true, error: 'ใช้ฟรีครบโควตาของเดือนนี้แล้วค่ะ เก่งมากใช้จนหมดเลย 😆 อยากทำต่อ แพ็กเริ่มต้นแค่ 59 บาท/เดือนเองค่ะ' + adminHint };
       }
-      return { success: false, upgradeRequired: true, error: 'ใช้งานครบโควตา ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนของแพ็ก "' + quota.pkg.name + '" แล้ว กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานต่อ' + adminHint };
+      return { success: false, upgradeRequired: true, error: 'เดือนนี้ใช้ครบโควตาของแพ็ก "' + quota.pkg.name + '" แล้วค่ะ ขยันทำเอกสารจังเลยนะคะ! อยากได้โควตาเพิ่ม อัปเกรดแพ็กได้เลยค่ะ' + adminHint };
     }
 
     const html = buildDocumentHTML(formData);
@@ -1228,7 +1228,7 @@ function buildDocumentHTML(d) {
     'ใบเสนอราคา':    {rl:'เรียน',           el:'วันหมดอายุ',          ev:d.expireDate||'-',   sig:'ผู้มีอำนาจลงนาม', note:d.note||'ราคานี้มีผลภายใน 30 วันนับจากวันที่ออกเอกสาร'},
     'ใบแจ้งหนี้':    {rl:'เรียน',           el:'วันครบกำหนดชำระ',     ev:d.dueDate||'-',      sig:'ผู้มีอำนาจลงนาม', note:d.note||'กรุณาชำระเงินภายในวันที่กำหนด'},
     'ใบสั่งซื้อ':    {rl:'ผู้ขาย / Vendor', el:'วันที่ต้องการสินค้า', ev:d.requiredDate||'-', sig:'ผู้สั่งซื้อ',       note:d.note||'กรุณาจัดส่งสินค้าตามกำหนด'},
-    'ใบเสร็จรับเงิน':{rl:'ผู้ชำระเงิน',    el:'วิธีชำระเงิน',        ev:d.paymentMethod||'-',sig:'ผู้รับเงิน',        note:d.note||'ได้รับชำระเงินเรียบร้อยแล้ว'},
+    'ใบเสร็จรับเงิน':{rl:'ผู้ชำระเงิน',    el:'วันที่รับชำระ / วิธีชำระเงิน', ev:(d.dueDate||'-')+' / '+(d.paymentMethod||'-'),sig:'ผู้รับเงิน',        note:d.note||'ได้รับชำระเงินเรียบร้อยแล้ว'},
     'ใบส่งของ':      {rl:'ส่งถึง',          el:'วันที่จัดส่ง',        ev:d.deliveryDate||'-', sig:'ผู้รับสินค้า',      note:d.note||'กรุณาตรวจสอบสินค้าก่อนรับมอบ'},
     'ใบวางบิล':      {rl:'เรียน',           el:'วันครบกำหนดชำระ',     ev:d.dueDate||'-',      sig:'ผู้มีอำนาจลงนาม', note:d.note||'กรุณาชำระเงินตามกำหนด'},
   };
@@ -1361,8 +1361,8 @@ function buildDocumentMenuMessage_() {
   const lines = KEYWORD_REPLIES_.map(function(k) {
     return '📄 ' + k.label + '\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + k.type;
   });
-  return 'หนูสามารถทำเอกสารได้ดังนี้ค่ะ 🌸\n\n' + lines.join('\n\n') +
-    '\n\n✨ ใช้ฟรีได้ 5 ครั้ง/เดือนเลยค่ะ ถ้าอยากสร้างได้ไม่จำกัดหรืออยากได้ระบบทำบัญชี/ยื่นภาษี พิมพ์ "แพ็กเกจ" ดูรายละเอียดได้เลยนะคะ 💕';
+  return 'หนูทำเอกสารให้ได้ตามนี้เลยค่ะ 📋✨\n\n' + lines.join('\n\n') +
+    '\n\nกดลิงก์ไหนก็เริ่มได้เลย ไม่ต้องเปิด Word ให้ปวดหัวแล้วนะคะ 😆\n\n✨ เดือนนี้ใช้ฟรีได้ 30 ครั้งเลยค่ะ ถ้าใช้บ่อยจนอยากได้เพิ่ม พิมพ์ "แพ็กเกจ" มาคุยกันได้เสมอนะคะ 🌸';
 }
 
 // Entry point LINE calls (routed here from doPost when body.events exists)
@@ -1401,7 +1401,7 @@ function handleLineWebhook_(body) {
       } else if (isSubscribeIntentQuery_(text)) {
         replyMessages = buildSubscribeReply_(text, lineUserId);
       } else if (match) {
-        replyMessages = [{ type: 'text', text: '👉 ' + match.label + '\nกดลิงก์นี้เพื่อเริ่มได้เลยค่ะ 💕\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + match.type }];
+        replyMessages = [{ type: 'text', text: '👉 ' + match.label + '\nกดลิงก์นี้ได้เลยค่ะ เดี๋ยวหนูจัดให้ 💨\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + match.type }];
       } else if (isMenuQuery_(text)) {
         replyMessages = [{ type: 'text', text: buildDocumentMenuMessage_() }];
       } else if (isTaxFeatureQuery_(text)) {
@@ -1426,7 +1426,7 @@ function handleLineWebhook_(body) {
         if (ev.replyToken) {
           replyMessagesToLine_(ev.replyToken, [{
             type: 'text',
-            text: 'ขออภัยค่ะ ระบบขัดข้องชั่วคราว รบกวนลองใหม่อีกครั้งนะคะ 🙏'
+            text: 'อ๊ะ ระบบสะดุดนิดหน่อยค่ะ 😅 รบกวนลองพิมพ์อีกทีนะคะ'
           }]);
         }
       } catch (notifyErr) {
@@ -1498,16 +1498,16 @@ function isTaxFeatureQuery_(text) {
 function buildPackageInfoMessage_() {
   return '📦 แพ็กเกจของ ง่าย ผู้ช่วยทำเอกสาร\n\n' +
     '🆓 ทดลองใช้ฟรี\n' +
-    '• สร้างเอกสารได้ 5 ครั้ง/เดือน ไม่มีค่าใช้จ่าย\n\n' +
+    '• สร้างเอกสารได้ 30 ครั้ง/เดือน ไม่มีค่าใช้จ่าย\n\n' +
     '1️⃣ แพ็คเริ่มต้น 59 บาท/เดือน\n' +
-    '• สร้างเอกสารได้ 30 ครั้ง/เดือน\n\n' +
+    '• สร้างเอกสารได้ 100 ครั้ง/เดือน\n\n' +
     '2️⃣ แพ็คโปร 149 บาท/เดือน\n' +
     '• สร้างเอกสารได้ไม่จำกัด\n\n' +
     '3️⃣ แพ็คพรีเมียม 249 บาท/เดือน\n' +
     '• สร้างเอกสารได้ไม่จำกัด\n' +
     '• ระบบทำบัญชี/ยื่นภาษีรายเดือน (เร็วๆ นี้)\n\n' +
-    '(น้องแชทตอบคำถามได้ฟรีทุกแพ็กเลยค่ะ 💕)\n\n' +
-    'สนใจสมัคร/อัปเกรดแพ็กเกจ ทักแอดมินได้เลยนะคะ 🙏💕\n\n' +
+    '(น้องแชทตอบคำถามให้ฟรีทุกแพ็กเลยนะคะ ถามได้เรื่อยๆ ไม่มีอั้น 😄)\n\n' +
+    'อยากรู้เพิ่มหรือสมัคร ทักแอดมินตัวเป็นๆ ได้เลยค่ะ ไม่กัด 🙏💕\n\n' +
     adminContactBlock_();
 }
 
@@ -1516,7 +1516,7 @@ function buildTaxFeatureMessage_(lineUserId) {
   if (sub && sub.pkg.hasTax) {
     return '🧾 ระบบทำบัญชี/ยื่นภาษีรายเดือน กำลังพัฒนาอยู่ค่ะ จะเปิดให้ใช้งานเร็วๆ นี้นะคะ (ท่านมีสิทธิ์ใช้งานฟีเจอร์นี้อยู่แล้วในแพ็ก ' + sub.pkg.name + ')';
   }
-  return '🧾 ฟีเจอร์ระบบบัญชี/ยื่นภาษี อยู่ในแพ็คพรีเมียม 249 บาท/เดือนเท่านั้นนะคะ พิมพ์ "แพ็กเกจ" เพื่อดูรายละเอียดและอัปเกรดได้เลยค่ะ';
+  return '🧾 เรื่องบัญชี/ยื่นภาษีอยู่ในแพ็คพรีเมียมค่ะ (แพ็คนี้จริงจังเรื่องเอกสารสุดๆ 😌) อยากดูรายละเอียด พิมพ์ "แพ็กเกจ" มาคุยกันได้เลยนะคะ';
 }
 
 // Only package premium249 (hasAI) gets real AI answers; everyone else gets an upsell.
@@ -1532,11 +1532,12 @@ function handleAiOrUpsell_(text, lineUserId) {
 // business / how to use the CHUAY document app. Anything else gets a
 // polite redirect instead of a free-ranging AI conversation.
 const BOT_SYSTEM_PROMPT_ =
-  'คุณคือผู้ช่วยตอบคำถามของ "ง่าย ผู้ช่วยทำเอกสาร" เป็นผู้หญิงตอบแบบน่ารักเป็นกันเอง ซึ่งเป็นแอปสร้างเอกสารธุรกิจผ่าน LINE ' +
+  'คุณคือผู้ช่วยตอบคำถามของ "ง่าย ผู้ช่วยทำเอกสาร" เป็นผู้หญิงตอบแบบน่ารักเป็นกันเอง แอบมีมุกตลกได้นิดหน่อยแบบไม่เวอร์ ซึ่งเป็นแอปสร้างเอกสารธุรกิจผ่าน LINE ' +
   '(ใบเสนอราคา, ใบสั่งซื้อ PO, ใบแจ้งหนี้ Invoice, ใบเสร็จรับเงิน, ใบส่งของ, ใบวางบิล) ' +
   'คุณคือด่านแรกที่ลูกค้าทักมาคุยด้วย — ถ้าลูกค้าทักทายเฉยๆ เช่น "สวัสดี", "หวัดดี", "Hello" ให้ทักทายกลับอย่างอบอุ่นเป็นกันเอง แนะนำตัวสั้นๆ ว่าช่วยอะไรได้บ้าง แล้วถามว่าวันนี้อยากให้ช่วยเรื่องอะไร ' +
   'ตอบเฉพาะคำถามเกี่ยวกับวิธีใช้งานแอปนี้ ฟีเจอร์ต่างๆ และบริการของบริษัทเท่านั้น ' +
   'ตอบสั้น กระชับ เป็นกันเอง เป็นภาษาไทย ไม่เกิน 3-4 ประโยค ' +
+  'สุภาพเสมอ ห้ามพูดจาขายของหรือชวนอัปเกรดแพ็กเกจถ้าลูกค้าไม่ได้ถามเรื่องราคา/โควตา/แพ็กเกจเอง — ตอบสิ่งที่เขาถามให้ตรงจุดพอ ไม่ต้องพยายามปิดการขาย ' +
   'ถ้าคำถามอยู่นอกขอบเขตนี้โดยสิ้นเชิง (เช่น เรื่องทั่วไปที่ไม่เกี่ยวกับแอปหรือบริการเลย) ' +
   'ให้ตอบอย่างสุภาพว่าไม่สามารถช่วยเรื่องนี้ได้ และแนะนำให้พิมพ์ถามเกี่ยวกับการใช้งานแอปแทน ' +
   'อย่าสร้างข้อมูลราคา/เงื่อนไขที่ไม่แน่ใจขึ้นมาเอง หากไม่ทราบให้แนะนำให้ติดต่อทีมงานโดยตรง';
@@ -1614,3 +1615,4 @@ function pushToLine_(toUserId, messages) {
     console.log('pushToLine_ error:', err);
   }
 }
+
