@@ -196,7 +196,7 @@ function tryHandleAdminApprove_(text, lineUserId) {
 
   pushToLine_(customerLineUserId, [{
     type: 'text',
-    text: '🎉 เปิดแพ็ก "' + pkg.name + '" ให้เรียบร้อยแล้วนะคะ พร้อมลุยทำเอกสารกันต่อได้เลย! ขอบคุณที่ไว้ใจให้ "ง่าย" ช่วยงานนะคะ 💕'
+    text: '🎉 เปิดใช้งานแพ็ก "' + pkg.name + '" ให้เรียบร้อยแล้วค่ะ ขอบคุณที่ใช้บริการนะคะ 💕'
   }]);
 
   return [{ type: 'text', text: '✅ เปิดใช้งานแพ็ก "' + pkg.name + '" ให้ ' + customerName + ' เรียบร้อยแล้วค่ะ' }];
@@ -235,8 +235,8 @@ function buildSubscribeReply_(text, lineUserId) {
   if (chosen) {
     const displayName = getLineDisplayName_(lineUserId);
     logPendingSubscription_(lineUserId, displayName, chosen);
-    let msg = '✅ รับเรื่องแล้วค่ะ! แพ็ก "' + chosen.name + '" (' + chosen.price + ' บาท/เดือน) ใช่ไหมคะ 🌸\n\n' +
-      'โอนเงิน ' + chosen.price + ' บาท ตามช่องทางด้านล่างนี้ได้เลยค่ะ แล้วส่งสลิปให้แอดมินหน่อยนะคะ เดี๋ยวเปิดให้ไวๆ (ยกเว้นแอดมินเผลอไปกินข้าวเที่ยงอยู่ 😆)\n\n' +
+    let msg = '✅ รับคำขอสมัคร "' + chosen.name + '" (' + chosen.price + ' บาท/เดือน) แล้วนะคะ 🌸\n\n' +
+      'กรุณาโอนเงิน ' + chosen.price + ' บาท ตามช่องทางด้านล่าง แล้วส่งสลิปให้แอดมินเพื่อยืนยันการเปิดใช้งานค่ะ\n\n' +
       bankTransferBlock_() +
       (PAYMENT_QR_IMAGE_URL ? '\n\n(หรือสแกน QR ที่แนบด้านล่างนี้ก็ได้ค่ะ)' : '') +
       '\n\n' + adminContactBlock_();
@@ -250,7 +250,7 @@ function buildSubscribeReply_(text, lineUserId) {
   }
   return [{
     type: 'text',
-    text: buildPackageInfoMessage_() + '\n\nอยากได้แพ็กไหน พิมพ์ชื่อมาบอกหนูได้เลยค่ะ (เช่น "สมัครแพ็คโปร") 🌸'
+    text: buildPackageInfoMessage_() + '\n\nพิมพ์ชื่อแพ็กที่สนใจ (เช่น "สมัครแพ็คโปร") เพื่อแจ้งความประสงค์ได้เลยค่ะ 🌸'
   }];
 }
 
@@ -268,11 +268,11 @@ function buildSubscribeReply_(text, lineUserId) {
 const PACKAGES = {
   free: {
     id: 'free', name: 'ทดลองใช้ฟรี', price: 0,
-    quotaPerMonth: 30, hasAI: false, hasTax: false
+    quotaPerMonth: 5, hasAI: false, hasTax: false
   },
   starter59: {
     id: 'starter59', name: 'แพ็คเริ่มต้น', price: 59,
-    quotaPerMonth: 100, hasAI: false, hasTax: false
+    quotaPerMonth: 30, hasAI: false, hasTax: false
   },
   pro149: {
     id: 'pro149', name: 'แพ็คโปร', price: 149,
@@ -498,8 +498,9 @@ const API_ACTIONS = {
   getDocHistory:      function(p) { return getDocHistory(p.docType, p.lineAuth); },
   generatePDF:        function(p) { return generatePDF(p.formData, p.lineAuth); },
   getCustomers:       function(p) { return getCustomers(p.lineAuth); },
-  getCashTransactions:    function(p) { return getCashTransactions(p.lineAuth); },
+  getCashTransactions:    function(p) { return getCashTransactions(p.lineAuth, p.yearMonth); },
   saveCashTransaction:    function(p) { return saveCashTransaction(p.transaction, p.lineAuth); },
+  deleteCashTransaction:  function(p) { return deleteCashTransaction(p.rowIndex, p.lineAuth); },
   generateCashReportPDF:  function(p) { return generateCashReportPDF(p.reportData, p.lineAuth); }
 };
 
@@ -780,7 +781,45 @@ function requireTaxAccess_(lineUserId) {
   }
 }
 
-function getCashTransactions(lineAuth) {
+// Normalizes a cell's date value (Date object OR string) down to a
+// 'yyyy-MM' key for month-filtering, without throwing — a single
+// malformed/empty date cell must never take down the whole transactions
+// list (that was the previous bug: new Date(bad value) fed straight into
+// Utilities.formatDate() inside the loop would throw and the outer
+// try/catch would then report the ENTIRE request as failed, hiding every
+// other legitimate row too).
+function monthKeyFromTxDate_(value) {
+  if (!value) return '';
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return isNaN(value.getTime()) ? '' : Utilities.formatDate(value, 'Asia/Bangkok', 'yyyy-MM');
+  }
+  const str = String(value).trim();
+  const m = str.match(/^(\d{4})-(\d{2})/);
+  if (m) return m[1] + '-' + m[2];
+  const parsed = new Date(str);
+  return isNaN(parsed.getTime()) ? '' : Utilities.formatDate(parsed, 'Asia/Bangkok', 'yyyy-MM');
+}
+
+// Same defensive idea for the display string.
+function dateCellToDisplayString_(value) {
+  try {
+    const d = (Object.prototype.toString.call(value) === '[object Date]') ? value : new Date(value);
+    if (isNaN(d.getTime())) return String(value || '');
+    return Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
+  } catch (e) {
+    return String(value || '');
+  }
+}
+
+// yearMonth (optional, 'yyyy-MM'): when passed, only that month's rows are
+// returned — keeps the payload small and the Accounting tab fast even
+// after years of history, instead of always shipping every row ever
+// entered. Omit it to get everything (kept for backward compatibility).
+// Each row's rowIndex is its actual sheet row (1-indexed) — the frontend
+// uses this as the delete key. Safe as long as no other write to this
+// user's own rows happens between listing and deleting in the same
+// session, which deleteCashTransaction re-verifies anyway before acting.
+function getCashTransactions(lineAuth, yearMonth) {
   try {
     const user = verifyLineUser_(lineAuth);
     requireTaxAccess_(user.lineUserId);
@@ -789,18 +828,55 @@ function getCashTransactions(lineAuth) {
     const data = sheet.getDataRange().getValues();
     const list = [];
     for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === user.lineUserId) {
-        list.push({
-          date: Utilities.formatDate(new Date(data[i][1]), 'Asia/Bangkok', 'yyyy-MM-dd'),
-          itemDescription: data[i][2],
-          income: Number(data[i][3] || 0),
-          expenseGoods: Number(data[i][4] || 0),
-          expenseOther: Number(data[i][5] || 0),
-          remarks: data[i][6] || ''
-        });
-      }
+      if (data[i][0] !== user.lineUserId) continue;
+      if (yearMonth && monthKeyFromTxDate_(data[i][1]) !== yearMonth) continue;
+      list.push({
+        rowIndex: i + 1,
+        date: dateCellToDisplayString_(data[i][1]),
+        itemDescription: data[i][2],
+        income: toNum_(data[i][3]),
+        expenseGoods: toNum_(data[i][4]),
+        expenseOther: toNum_(data[i][5]),
+        remarks: data[i][6] || ''
+      });
     }
+    list.sort(function(a, b) { return b.rowIndex - a.rowIndex; }); // newest entry first
     return { success: true, transactions: list };
+  } catch (e) {
+    return { success: false, error: e.message || e.toString() };
+  }
+}
+
+// Deletes one of the CURRENT user's own CashTransactions rows by sheet row
+// number (as returned by getCashTransactions). Re-checks ownership of that
+// exact row right before deleting (not just trusting the id the client
+// sent) so one customer can never delete another customer's row even by
+// guessing/tampering with rowIndex. Wrapped in the same script lock used
+// elsewhere in this file for any read-then-write against a shared sheet.
+function deleteCashTransaction(rowIndex, lineAuth) {
+  try {
+    const user = verifyLineUser_(lineAuth);
+    requireTaxAccess_(user.lineUserId);
+    const idx = parseInt(rowIndex, 10);
+    if (!idx || idx < 2) throw new Error('รายการไม่ถูกต้องค่ะ');
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+      const sheet = getCashTransactionSheet_(ss);
+      if (idx > sheet.getLastRow()) {
+        throw new Error('ไม่พบรายการนี้แล้วค่ะ (อาจถูกลบไปก่อนหน้านี้)');
+      }
+      const rowOwner = sheet.getRange(idx, 1).getValue();
+      if (rowOwner !== user.lineUserId) {
+        throw new Error('ไม่พบรายการนี้ หรือคุณไม่มีสิทธิ์ลบรายการนี้ค่ะ');
+      }
+      sheet.deleteRow(idx);
+      return { success: true };
+    } finally {
+      lock.releaseLock();
+    }
   } catch (e) {
     return { success: false, error: e.message || e.toString() };
   }
@@ -845,15 +921,33 @@ function saveCashTransaction(transaction, lineAuth) {
     if (!transaction || !transaction.date || !transaction.itemDescription) {
       throw new Error('กรุณากรอกวันที่และรายการให้ครบถ้วนค่ะ');
     }
+    // new Date('') / new Date(garbage) doesn't throw in JS, it just yields
+    // an Invalid Date — catching that here (instead of only at read time in
+    // getCashTransactions) stops a bad row from ever being written at all.
+    if (isNaN(new Date(transaction.date).getTime())) {
+      throw new Error('รูปแบบวันที่ไม่ถูกต้องค่ะ');
+    }
+    // toNum_ (defined below) is NaN-safe, unlike Number(x || 0) — a
+    // non-numeric string like "abc" would otherwise slip through as NaN
+    // and silently poison every summary/report total downstream.
+    const income = toNum_(transaction.income);
+    const expenseGoods = toNum_(transaction.expenseGoods);
+    const expenseOther = toNum_(transaction.expenseOther);
+    if (income < 0 || expenseGoods < 0 || expenseOther < 0) {
+      throw new Error('จำนวนเงินต้องไม่ติดลบค่ะ');
+    }
+    if (income + expenseGoods + expenseOther <= 0) {
+      throw new Error('กรุณากรอกจำนวนเงินให้มากกว่า 0 ค่ะ');
+    }
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = getCashTransactionSheet_(ss);
     sheet.appendRow([
       user.lineUserId,
       transaction.date,
       transaction.itemDescription,
-      Number(transaction.income || 0),
-      Number(transaction.expenseGoods || 0),
-      Number(transaction.expenseOther || 0),
+      income,
+      expenseGoods,
+      expenseOther,
       transaction.remarks || '',
       new Date()
     ]);
@@ -981,15 +1075,15 @@ function generatePDF(formData, lineAuth) {
     if (!quota.allowed) {
       const adminHint = '\n\n' + adminContactBlock_();
       if (quota.reason === 'no_package') {
-        return { success: false, upgradeRequired: true, error: 'อุ๊ย ระบบหาแพ็กเกจของบัญชีนี้ไม่เจอค่ะ ลองล็อกอินใหม่อีกทีนะคะ ถ้ายังไม่ได้ทักแอดมินมาได้เลยค่ะ' + adminHint };
+        return { success: false, upgradeRequired: true, error: 'บัญชีนี้ยังไม่มีแพ็กเกจที่ใช้งานได้ กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง หรือทักแอดมิน' + adminHint };
       }
       if (quota.reason === 'expired') {
-        return { success: false, upgradeRequired: true, error: 'แพ็ก "' + quota.pkg.name + '" หมดอายุแล้วค่ะ (เวลาผ่านไปไวเนอะ 😅) ต่ออายุนิดเดียวก็ใช้งานต่อได้เลยนะคะ' + adminHint };
+        return { success: false, upgradeRequired: true, error: 'แพ็ก "' + quota.pkg.name + '" ของคุณหมดอายุแล้ว กรุณาต่ออายุเพื่อใช้งานต่อค่ะ' + adminHint };
       }
       if (quota.reason === 'free_quota_exceeded') {
-        return { success: false, upgradeRequired: true, error: 'ใช้ฟรีครบโควตาของเดือนนี้แล้วค่ะ เก่งมากใช้จนหมดเลย 😆 อยากทำต่อ แพ็กเริ่มต้นแค่ 59 บาท/เดือนเองค่ะ' + adminHint };
+        return { success: false, upgradeRequired: true, error: 'ใช้งานฟรีครบ ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนแล้ว สมัครแพ็กเริ่มต้นเพียง 59 บาท/เดือน เพื่อใช้งานต่อได้เลยค่ะ' + adminHint };
       }
-      return { success: false, upgradeRequired: true, error: 'เดือนนี้ใช้ครบโควตาของแพ็ก "' + quota.pkg.name + '" แล้วค่ะ ขยันทำเอกสารจังเลยนะคะ! อยากได้โควตาเพิ่ม อัปเกรดแพ็กได้เลยค่ะ' + adminHint };
+      return { success: false, upgradeRequired: true, error: 'ใช้งานครบโควตา ' + quota.pkg.quotaPerMonth + ' ครั้ง/เดือนของแพ็ก "' + quota.pkg.name + '" แล้ว กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานต่อ' + adminHint };
     }
 
     const html = buildDocumentHTML(formData);
@@ -1228,7 +1322,7 @@ function buildDocumentHTML(d) {
     'ใบเสนอราคา':    {rl:'เรียน',           el:'วันหมดอายุ',          ev:d.expireDate||'-',   sig:'ผู้มีอำนาจลงนาม', note:d.note||'ราคานี้มีผลภายใน 30 วันนับจากวันที่ออกเอกสาร'},
     'ใบแจ้งหนี้':    {rl:'เรียน',           el:'วันครบกำหนดชำระ',     ev:d.dueDate||'-',      sig:'ผู้มีอำนาจลงนาม', note:d.note||'กรุณาชำระเงินภายในวันที่กำหนด'},
     'ใบสั่งซื้อ':    {rl:'ผู้ขาย / Vendor', el:'วันที่ต้องการสินค้า', ev:d.requiredDate||'-', sig:'ผู้สั่งซื้อ',       note:d.note||'กรุณาจัดส่งสินค้าตามกำหนด'},
-    'ใบเสร็จรับเงิน':{rl:'ผู้ชำระเงิน',    el:'วันที่รับชำระ / วิธีชำระเงิน', ev:(d.dueDate||'-')+' / '+(d.paymentMethod||'-'),sig:'ผู้รับเงิน',        note:d.note||'ได้รับชำระเงินเรียบร้อยแล้ว'},
+    'ใบเสร็จรับเงิน':{rl:'ผู้ชำระเงิน',    el:'วิธีชำระเงิน',        ev:d.paymentMethod||'-',sig:'ผู้รับเงิน',        note:d.note||'ได้รับชำระเงินเรียบร้อยแล้ว'},
     'ใบส่งของ':      {rl:'ส่งถึง',          el:'วันที่จัดส่ง',        ev:d.deliveryDate||'-', sig:'ผู้รับสินค้า',      note:d.note||'กรุณาตรวจสอบสินค้าก่อนรับมอบ'},
     'ใบวางบิล':      {rl:'เรียน',           el:'วันครบกำหนดชำระ',     ev:d.dueDate||'-',      sig:'ผู้มีอำนาจลงนาม', note:d.note||'กรุณาชำระเงินตามกำหนด'},
   };
@@ -1361,8 +1455,8 @@ function buildDocumentMenuMessage_() {
   const lines = KEYWORD_REPLIES_.map(function(k) {
     return '📄 ' + k.label + '\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + k.type;
   });
-  return 'หนูทำเอกสารให้ได้ตามนี้เลยค่ะ 📋✨\n\n' + lines.join('\n\n') +
-    '\n\nกดลิงก์ไหนก็เริ่มได้เลย ไม่ต้องเปิด Word ให้ปวดหัวแล้วนะคะ 😆\n\n✨ เดือนนี้ใช้ฟรีได้ 30 ครั้งเลยค่ะ ถ้าใช้บ่อยจนอยากได้เพิ่ม พิมพ์ "แพ็กเกจ" มาคุยกันได้เสมอนะคะ 🌸';
+  return 'หนูสามารถทำเอกสารได้ดังนี้ค่ะ 🌸\n\n' + lines.join('\n\n') +
+    '\n\n✨ ใช้ฟรีได้ 5 ครั้ง/เดือนเลยค่ะ ถ้าอยากสร้างได้ไม่จำกัดหรืออยากได้ระบบทำบัญชี/ยื่นภาษี พิมพ์ "แพ็กเกจ" ดูรายละเอียดได้เลยนะคะ 💕';
 }
 
 // Entry point LINE calls (routed here from doPost when body.events exists)
@@ -1401,7 +1495,7 @@ function handleLineWebhook_(body) {
       } else if (isSubscribeIntentQuery_(text)) {
         replyMessages = buildSubscribeReply_(text, lineUserId);
       } else if (match) {
-        replyMessages = [{ type: 'text', text: '👉 ' + match.label + '\nกดลิงก์นี้ได้เลยค่ะ เดี๋ยวหนูจัดให้ 💨\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + match.type }];
+        replyMessages = [{ type: 'text', text: '👉 ' + match.label + '\nกดลิงก์นี้เพื่อเริ่มได้เลยค่ะ 💕\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + match.type }];
       } else if (isMenuQuery_(text)) {
         replyMessages = [{ type: 'text', text: buildDocumentMenuMessage_() }];
       } else if (isTaxFeatureQuery_(text)) {
@@ -1410,38 +1504,24 @@ function handleLineWebhook_(body) {
         replyMessages = [{ type: 'text', text: handleAiOrUpsell_(text, lineUserId) }];
       }
 
-      const replySucceeded = replyMessagesToLine_(replyToken, replyMessages);
-      // Reply tokens expire after ~1 minute and work once only — if a slow
-      // step upstream (Gemini, Sheets I/O) ate that minute, the reply call
-      // above fails. Previously that failure was swallowed with nothing
-      // else attempted, which is indistinguishable from the bot just not
-      // responding at all. Push doesn't need a reply token, only the
-      // customer's LINE user ID (which we already have), so it can recover
-      // the message in exactly this situation.
-      if (!replySucceeded && lineUserId) {
-        console.log('reply failed, falling back to push for', lineUserId);
-        pushToLine_(lineUserId, replyMessages);
-      }
+      replyMessagesToLine_(replyToken, replyMessages);
     } catch (err) {
       // Previously this just swallowed the error entirely — one bad event
       // wouldn't break the whole webhook batch, which is correct, but it
       // also meant the customer got ZERO reply with zero signal anything
       // went wrong (looks exactly like the bot silently hung). Try to at
-      // least tell them something broke — first via reply token if it's
-      // still valid, and if that fails too, via push — using the reply
-      // token if it's still valid — LINE reply tokens expire quickly (~1
-      // minute) and work once only, so this best-effort send is itself
-      // wrapped in its own try/catch to make sure a failure here still
-      // can't break the batch loop.
+      // least tell them something broke, using the reply token if it's
+      // still valid — LINE reply tokens expire quickly (~1 minute) and
+      // work once only, so this best-effort send is itself wrapped in its
+      // own try/catch to make sure a failure here still can't break the
+      // batch loop.
       console.log('handleLineWebhook_ event error:', err);
       try {
-        const errText = 'อ๊ะ ระบบสะดุดนิดหน่อยค่ะ 😅 รบกวนลองพิมพ์อีกทีนะคะ';
-        let sent = false;
         if (ev.replyToken) {
-          sent = replyMessagesToLine_(ev.replyToken, [{ type: 'text', text: errText }]);
-        }
-        if (!sent && ev.source && ev.source.userId) {
-          pushToLine_(ev.source.userId, [{ type: 'text', text: errText }]);
+          replyMessagesToLine_(ev.replyToken, [{
+            type: 'text',
+            text: 'ขออภัยค่ะ ระบบขัดข้องชั่วคราว รบกวนลองใหม่อีกครั้งนะคะ 🙏'
+          }]);
         }
       } catch (notifyErr) {
         console.log('handleLineWebhook_ fallback reply also failed:', notifyErr);
@@ -1512,25 +1592,30 @@ function isTaxFeatureQuery_(text) {
 function buildPackageInfoMessage_() {
   return '📦 แพ็กเกจของ ง่าย ผู้ช่วยทำเอกสาร\n\n' +
     '🆓 ทดลองใช้ฟรี\n' +
-    '• สร้างเอกสารได้ 30 ครั้ง/เดือน ไม่มีค่าใช้จ่าย\n\n' +
+    '• สร้างเอกสารได้ 5 ครั้ง/เดือน ไม่มีค่าใช้จ่าย\n\n' +
     '1️⃣ แพ็คเริ่มต้น 59 บาท/เดือน\n' +
-    '• สร้างเอกสารได้ 100 ครั้ง/เดือน\n\n' +
+    '• สร้างเอกสารได้ 30 ครั้ง/เดือน\n\n' +
     '2️⃣ แพ็คโปร 149 บาท/เดือน\n' +
     '• สร้างเอกสารได้ไม่จำกัด\n\n' +
     '3️⃣ แพ็คพรีเมียม 249 บาท/เดือน\n' +
     '• สร้างเอกสารได้ไม่จำกัด\n' +
-    '• ระบบทำบัญชี/ยื่นภาษีรายเดือน (เร็วๆ นี้)\n\n' +
-    '(น้องแชทตอบคำถามให้ฟรีทุกแพ็กเลยนะคะ ถามได้เรื่อยๆ ไม่มีอั้น 😄)\n\n' +
-    'อยากรู้เพิ่มหรือสมัคร ทักแอดมินตัวเป็นๆ ได้เลยค่ะ ไม่กัด 🙏💕\n\n' +
+    '• ระบบบัญชีรายรับ-รายจ่ายรายเดือน + ออกรายงาน PDF\n\n' +
+    '(น้องแชทตอบคำถามได้ฟรีทุกแพ็กเลยค่ะ 💕)\n\n' +
+    'สนใจสมัคร/อัปเกรดแพ็กเกจ ทักแอดมินได้เลยนะคะ 🙏💕\n\n' +
     adminContactBlock_();
 }
 
 function buildTaxFeatureMessage_(lineUserId) {
   const sub = lineUserId ? getUserSubscription_(lineUserId) : null;
-  if (sub && sub.pkg.hasTax) {
-    return '🧾 ระบบทำบัญชี/ยื่นภาษีรายเดือน กำลังพัฒนาอยู่ค่ะ จะเปิดให้ใช้งานเร็วๆ นี้นะคะ (ท่านมีสิทธิ์ใช้งานฟีเจอร์นี้อยู่แล้วในแพ็ก ' + sub.pkg.name + ')';
+  if (sub && !sub.expired && sub.pkg.hasTax) {
+    return '🧾 ระบบบัญชีเปิดใช้งานได้แล้วค่ะ! เข้าแอป แล้วกดแท็บ "📊 บัญชี" ด้านบนได้เลย\n\n' +
+      '✅ บันทึกรายรับ-รายจ่ายเอง\n' +
+      '✅ ใบเสร็จที่ออกในแอปนับเป็นรายรับให้อัตโนมัติ\n' +
+      '✅ ดูสรุปกำไร-ขาดทุนรายเดือน\n' +
+      '✅ ออกรายงาน PDF ได้ทันที\n\n' +
+      'หมายเหตุ: ระบบนี้ช่วยสรุปตัวเลขให้ดูง่ายขึ้นเท่านั้น ยังไม่ได้ยื่นภาษีให้อัตโนมัตินะคะ 🙏';
   }
-  return '🧾 เรื่องบัญชี/ยื่นภาษีอยู่ในแพ็คพรีเมียมค่ะ (แพ็คนี้จริงจังเรื่องเอกสารสุดๆ 😌) อยากดูรายละเอียด พิมพ์ "แพ็กเกจ" มาคุยกันได้เลยนะคะ';
+  return '🧾 ฟีเจอร์ระบบบัญชี อยู่ในแพ็คพรีเมียม 249 บาท/เดือนเท่านั้นนะคะ พิมพ์ "แพ็กเกจ" เพื่อดูรายละเอียดและอัปเกรดได้เลยค่ะ';
 }
 
 // Only package premium249 (hasAI) gets real AI answers; everyone else gets an upsell.
@@ -1542,203 +1627,26 @@ function handleAiOrUpsell_(text, lineUserId) {
   return askGemini_(text);
 }
 
-// Restricted-scope FAQ system prompt — only answers questions about this
-// business / how to use the CHUAY document app. Anything else gets a
-// polite redirect instead of a free-ranging AI conversation.
-
-  const BOT_SYSTEM_PROMPT_ = `
-# บทบาท
-
-คุณชื่อ "ง่าย"
-
-เป็นเลขาสาว AI ผู้ช่วยทำเอกสาร
-
-เรียกตัวเองว่า "หนู"
-
-เรียกผู้ใช้ว่า "คุณ"
-
-พูดภาษาไทยสุภาพ เป็นกันเอง สดใส น่ารัก ขี้เล่นเล็กน้อย
-
-ใช้ Emoji พอเหมาะ เช่น 😊✨📄❤️
-
-ไม่ใช้ Emoji ทุกประโยค
-
-----------------------------------------
-
-# หน้าที่
-
-ช่วยงานเอกสารเป็นหลัก
-
-เช่น
-
-• ใบเสนอราคา
-
-• ใบแจ้งหนี้
-
-• ใบเสร็จรับเงิน
-
-• ใบสั่งซื้อ
-
-• ใบส่งของ
-
-• ใบวางบิล
-
-• ตรวจข้อความ
-
-• ปรับข้อความให้เป็นทางการ
-
-----------------------------------------
-
-# วิธีตอบ
-
-ตอบสั้น
-
-เข้าใจง่าย
-
-เหมือนเลขาส่วนตัว
-
-ไม่เกิน 4 บรรทัด
-
-อย่าอธิบายยาว
-
-----------------------------------------
-
-# เมื่อลูกค้าทักครั้งแรก
-
-ตอบว่า
-
-สวัสดีค่ะ 😊
-
-หนูชื่อ "ง่าย"
-
-ผู้ช่วยทำเอกสารของคุณค่ะ
-
-วันนี้ให้หนูช่วยอะไรดีคะ ✨
-
-----------------------------------------
-
-# เมื่อลูกค้าต้องการสร้างเอกสาร
-
-อย่าอธิบายขั้นตอน
-
-อย่าให้กรอกฟอร์มยาว
-
-ถามทีละข้อ
-
-ตัวอย่าง
-
-ลูกค้าชื่ออะไรคะ 😊
-
-เมื่อผู้ใช้ตอบ
-
-ถามต่อเพียง 1 คำถาม
-
-เช่น
-
-เสนอขายสินค้าอะไรคะ
-
-เมื่อข้อมูลครบ
-
-ตอบว่า
-
-ข้อมูลครบแล้วค่ะ ✨
-
-เดี๋ยวหนูจัดทำเอกสารให้เลยนะคะ ❤️
-
-----------------------------------------
-
-# ถ้าข้อมูลยังไม่ครบ
-
-ถามเฉพาะข้อมูลที่ขาด
-
-ห้ามถามหลายข้อพร้อมกัน
-
-----------------------------------------
-
-# ถ้าผู้ใช้ถามเรื่องทั่วไป
-
-ตอบได้
-
-แต่ให้สั้น
-
-ถ้าเกี่ยวกับธุรกิจหรือเอกสาร ให้ช่วยเต็มที่
-
-ถ้าเป็นเรื่องทั่วไป ให้ตอบไม่เกิน 5 บรรทัด
-
-----------------------------------------
-
-# บุคลิก
-
-สุภาพ
-
-ยิ้มแย้ม
-
-น่ารัก
-
-อบอุ่น
-
-ช่วยเหลือเก่ง
-
-ไม่ประชด
-
-ไม่เถียงผู้ใช้
-
-----------------------------------------
-
-# ข้อห้าม
-
-ห้ามแต่งข้อมูลเอง
-
-ห้ามเดา
-
-ห้ามสร้างข้อมูลลูกค้าเอง
-
-ห้ามสร้างยอดเงินเอง
-
-ห้ามสร้างเลขผู้เสียภาษีเอง
-
-หากไม่ทราบ ให้ถามผู้ใช้
-
-----------------------------------------
-
-# การใช้งานร่วมกับระบบ
-
-ระบบภายนอกจะเป็นผู้สร้างเอกสาร
-
-คุณมีหน้าที่
-
-- ช่วยเก็บข้อมูล
-
-- ช่วยถามข้อมูล
-
-- ช่วยตรวจข้อมูล
-
-- ช่วยร่างข้อความ
-
-- ช่วยอธิบายเอกสาร
-
-อย่าบอกให้ผู้ใช้กรอกฟอร์มเอง
-
-ให้ช่วยทีละขั้นตอน
-
-----------------------------------------
-
-# เป้าหมาย
-
-ทำให้ผู้ใช้รู้สึกเหมือนมีเลขาส่วนตัว
-
-ตอบรวดเร็ว
-
-สุภาพ
-
-เป็นมิตร
-
-ใช้ Token ให้น้อยที่สุด
-
-ช่วยให้ผู้ใช้สร้างเอกสารได้เร็วที่สุด
-
-ทุกคำตอบต้องมีประโยชน์ต่อการทำงานจริง
-`;
+// Persona system prompt for "ง่าย" (a cute AI secretary). Kept deliberately
+// short — this whole string is sent as input tokens on EVERY single chat
+// reply (see askGemini_ below), so padding it with decorative headers/blank
+// lines (as long, elaborate persona prompts often do) is pure wasted cost
+// at scale, not just a one-time thing.
+//
+// Important constraint baked in on purpose: this AI can ONLY reply with
+// text — there's no code path connecting it to generatePDF (that only runs
+// from the LIFF web form). So it must never promise "หนูจัดทำเอกสารให้เลยนะคะ"
+// (a message implying the PDF just happens) — that would be a promise the
+// system can't keep. It's fine to chat/collect details for warmth, but it
+// always has to end by pointing them to the app to actually finish.
+const BOT_SYSTEM_PROMPT_ = `คุณคือ "ง่าย" เลขาสาว AI ของแอปสร้างเอกสารธุรกิจผ่าน LINE (ใบเสนอราคา ใบแจ้งหนี้ ใบสั่งซื้อ ใบเสร็จรับเงิน ใบส่งของ ใบวางบิล) เรียกตัวเองว่า "หนู" เรียกลูกค้าว่า "คุณ" นิสัยน่ารัก สดใส ขี้เล่นนิดๆ ใช้อีโมจิพอดี ไม่ใช้ทุกประโยค
+
+กติกา:
+- ตอบสั้น กระชับ ไม่เกิน 2-3 ประโยค ห้ามยืดยาว
+- ทักครั้งแรก: แนะนำตัวสั้นๆ ว่าช่วยอะไรได้บ้าง แล้วถามว่าวันนี้ให้ช่วยเรื่องอะไร
+- ลูกค้าอยากสร้างเอกสาร: คุยเก็บรายละเอียดคร่าวๆ ได้ (ชื่อลูกค้า/สินค้า/ราคา) เพื่อให้รู้สึกมีคนช่วย แต่ห้ามพูดว่า "จัดทำเอกสารให้เลยนะคะ" เด็ดขาด เพราะหนูสร้าง PDF เองไม่ได้ — ต้องชวนเปิดแอปเพื่อกรอกให้ครบและกดสร้างจริงเสมอ
+- นอกเรื่องเอกสาร/แอป: ตอบแบบเป็นมิตรสั้นๆ ได้ 1-2 ประโยค แล้ววกกลับมาถามเรื่องเอกสาร ห้ามเถียง ห้ามอธิบายยาว
+- ห้ามเดา/แต่งชื่อ ราคา เลขภาษี หรือเงื่อนไขที่ไม่รู้แน่ชัด ไม่ทราบให้แนะนำติดต่อทีมงาน`;
 
 function askGemini_(userText) {
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
@@ -1746,21 +1654,19 @@ function askGemini_(userText) {
 
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
   const payload = {
-  system_instruction: {
-    parts: [{
-      text: BOT_SYSTEM_PROMPT_ +
-      "\n\nกฎเพิ่มเติม:\n" +
-      "- ตอบไม่เกิน 80 คำ\n" +
-      "- ถามครั้งละ 1 คำถาม\n" +
-      "- อย่าอธิบายยาว\n" +
-      "- ถ้าใช้เมนูหรือ Template ได้ ให้แนะนำสั้น ๆ แล้วจบ"
-    }]
-  },
-  contents: [{
-    role: "user",
-    parts: [{ text: userText }]
-  }]
-};
+    system_instruction: { parts: [{ text: BOT_SYSTEM_PROMPT_ }] },
+    contents: [{ role: 'user', parts: [{ text: userText }] }],
+    // "ตอบสั้น 2-3 ประโยค" in the prompt is a request, not a guarantee — the
+    // model can still ramble on an unusual input. This caps actual billed
+    // output tokens as a hard backstop regardless of what the prompt says.
+    // gemini-2.5-flash "thinking" tokens count against maxOutputTokens too —
+    // on a small cap like this, thinking alone can eat the whole budget and
+    // leave 0 tokens for the actual reply (silent empty response). This
+    // isn't a reasoning task, so thinking is switched off entirely: cheaper
+    // AND removes that failure mode.
+    generationConfig: { maxOutputTokens: 200, temperature: 0.8, thinkingConfig: { thinkingBudget: 0 } }
+  };
+
   try {
     const res = UrlFetchApp.fetch(url, {
       method: 'post',
@@ -1787,12 +1693,9 @@ function replyToLine_(replyToken, text) {
 // reply can include e.g. a text message plus a QR-code image message (used
 // by the subscribe flow below — LINE's reply API supports up to 5 messages
 // per reply token).
-// Returns true if LINE accepted the reply (2xx), false otherwise — callers
-// use this to fall back to a push message (see handleLineWebhook_) instead
-// of silently doing nothing when the reply fails.
 function replyMessagesToLine_(replyToken, messages) {
   const token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
-  if (!token) { console.log('LINE_CHANNEL_ACCESS_TOKEN is missing!'); return false; }
+  if (!token) { console.log('LINE_CHANNEL_ACCESS_TOKEN is missing!'); return; }
   try {
     const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'post',
@@ -1801,12 +1704,9 @@ function replyMessagesToLine_(replyToken, messages) {
       payload: JSON.stringify({ replyToken: replyToken, messages: messages }),
       muteHttpExceptions: true
     });
-    const code = res.getResponseCode();
-    console.log('LINE reply status:', code, res.getContentText());
-    return code >= 200 && code < 300;
+    console.log('LINE reply status:', res.getResponseCode(), res.getContentText());
   } catch (err) {
     console.log('replyMessagesToLine_ error:', err);
-    return false;
   }
 }
 
@@ -1817,7 +1717,7 @@ function replyMessagesToLine_(replyToken, messages) {
 function pushToLine_(toUserId, messages) {
   try {
     const token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
-    if (!token || !toUserId) return false;
+    if (!token || !toUserId) return;
     const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
       method: 'post',
       contentType: 'application/json',
@@ -1825,12 +1725,9 @@ function pushToLine_(toUserId, messages) {
       payload: JSON.stringify({ to: toUserId, messages: messages }),
       muteHttpExceptions: true
     });
-    const code = res.getResponseCode();
-    console.log('LINE push status:', code, res.getContentText());
-    return code >= 200 && code < 300;
+    console.log('LINE push status:', res.getResponseCode(), res.getContentText());
   } catch (err) {
     console.log('pushToLine_ error:', err);
-    return false;
   }
 }
 
