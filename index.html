@@ -324,7 +324,7 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 
   <section class="doc-selector"><div class="doc-tabs" id="docTabs"></div></section>
 
-  <main class="main">
+  <main class="main" id="docMain">
     <div id="formArea">
 
       <!-- Success -->
@@ -459,6 +459,83 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
             <div class="prev-total" id="pv-total">฿ 0.00</div>
           </div>
           <p class="preview-tip">ตัวอย่างแสดงโครงสร้างเท่านั้น<br/>PDF จริงจะมีรูปแบบสมบูรณ์กว่า</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Accounting (แท็บบัญชี) -->
+  <main class="main" id="acctMain" style="display:none;grid-template-columns:1fr">
+    <div>
+      <!-- Locked state — shown when the current package doesn't include hasTax -->
+      <div class="card" id="acctLocked" style="display:none">
+        <div class="card-body" style="text-align:center;padding:36px 20px">
+          <div style="font-size:38px;margin-bottom:10px">🔒</div>
+          <div style="font-weight:800;font-size:16px;margin-bottom:6px">ระบบบัญชีอยู่ในแพ็คพรีเมียม</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px">
+            บันทึกรายรับ-รายจ่าย ดูสรุปกำไร-ขาดทุนรายเดือน และออกรายงาน PDF ได้ทันที<br/>
+            เฉพาะแพ็คพรีเมียม 249 บาท/เดือนเท่านั้นค่ะ
+          </div>
+          <button class="btn btn-primary" onclick="contactAdminForUpgrade()">💬 ทักแอดมินเพื่ออัปเกรด</button>
+        </div>
+      </div>
+
+      <div id="acctContent" style="display:none">
+        <!-- สรุปรายเดือน -->
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">📊 สรุปบัญชีรายเดือน</div>
+            <input type="month" id="acctMonth" onchange="loadAccounting()"
+              style="border:1.5px solid var(--border);border-radius:7px;padding:6px 10px;font:inherit;font-size:13px;background:var(--surface)"/>
+          </div>
+          <div class="card-body">
+            <div class="grid2">
+              <div class="field">
+                <label>รายรับรวม</label>
+                <div id="acctIncome" style="font-size:20px;font-weight:800;color:#1a8a4a">0.00 บาท</div>
+              </div>
+              <div class="field">
+                <label>รายจ่ายรวม</label>
+                <div id="acctExpense" style="font-size:20px;font-weight:800;color:#c0392b">0.00 บาท</div>
+              </div>
+            </div>
+            <div class="total-row total-grand" style="border-radius:7px;margin-top:10px">
+              <span>กำไร/ขาดทุนสุทธิ</span><span id="acctNet">0.00 บาท</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- บันทึกรายการ -->
+        <div class="card">
+          <div class="card-head"><div class="card-title">➕ บันทึกรายการ</div></div>
+          <div class="card-body">
+            <div class="grid2">
+              <div class="field"><label>วันที่<span class="req">*</span></label><input type="date" id="acctDate"/></div>
+              <div class="field">
+                <label>ประเภท<span class="req">*</span></label>
+                <select id="acctKind">
+                  <option value="income">รายรับ</option>
+                  <option value="goods">รายจ่าย — ซื้อสินค้า/ต้นทุน</option>
+                  <option value="other">รายจ่าย — อื่นๆ (ค่าเช่า, เงินเดือน ฯลฯ)</option>
+                </select>
+              </div>
+              <div class="field col2"><label>รายการ<span class="req">*</span></label><input id="acctDesc" placeholder="เช่น ขายสินค้าหน้าร้าน, ค่าเช่าร้านเดือน ก.ค."/></div>
+              <div class="field"><label>จำนวนเงิน (บาท)<span class="req">*</span></label><input type="number" id="acctAmount" min="0" step="any" placeholder="0.00"/></div>
+              <div class="field"><label>หมายเหตุ</label><input id="acctRemarks" placeholder="(ถ้ามี)"/></div>
+            </div>
+            <button class="btn btn-primary" id="acctAddBtn" style="margin-top:10px;width:100%;justify-content:center" onclick="addAcctTransaction()">💾 บันทึกรายการ</button>
+          </div>
+        </div>
+
+        <!-- รายการเดือนนี้ -->
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">📋 รายการเดือนนี้</div>
+            <button class="btn btn-accent btn-sm" onclick="downloadAcctReport()">📄 ออกรายงาน PDF</button>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div id="acctList" style="padding:16px;font-size:13px;color:var(--muted);text-align:center">กำลังโหลด...</div>
+          </div>
         </div>
       </div>
     </div>
@@ -636,7 +713,8 @@ function initApp(){
   buildTabs();
   // Deep link: if the chat button/LIFF URL included ?type=po (etc.), jump straight to that tab
   const requestedType=getRequestedDocType_();
-  if(requestedType) switchType(requestedType);
+  if(isAccountingDeepLink_()) openAccountingTab();
+  else if(requestedType) switchType(requestedType);
   // Init form
   initDates();
   addRow();
@@ -652,6 +730,10 @@ function getRequestedDocType_(){
     if(!id) return null;
     return DOC_TYPES.find(function(dt){return dt.id===id;}) || null;
   }catch(e){ return null; }
+}
+function isAccountingDeepLink_(){
+  try{ return new URLSearchParams(location.search).get('type')==='accounting'; }
+  catch(e){ return false; }
 }
 
 function logout(){
@@ -803,11 +885,25 @@ function buildTabs(){
     btn.onclick=function(){switchType(dt);};
     wrap.appendChild(btn);
   });
+  // Accounting isn't a document type (no PDF form fields), so it's kept
+  // out of DOC_TYPES/switchType and given its own tab + click handler.
+  const acctBtn=document.createElement('button');
+  acctBtn.className='doc-tab';
+  acctBtn.id='acctTabBtn';
+  acctBtn.style.background='#fff';
+  acctBtn.textContent='📊 บัญชี';
+  acctBtn.onclick=openAccountingTab;
+  wrap.appendChild(acctBtn);
 }
 
 function switchType(dt){
   currentType=dt;
+  document.getElementById('acctMain').style.display='none';
+  document.getElementById('docMain').style.display='';
+  const acctBtn=document.getElementById('acctTabBtn');
+  if(acctBtn){acctBtn.classList.remove('active');acctBtn.style.background='#fff';}
   document.querySelectorAll('.doc-tab').forEach(function(b){
+    if(b===acctBtn) return;
     const active=b.dataset.id===dt.id;
     b.classList.toggle('active',active);
     b.style.background=active?dt.color:'#fff';
@@ -1015,6 +1111,172 @@ function shareToCustomer(){
     });
 }
 
+// ── Accounting (บัญชี) ───────────────────────────────────────
+// Premium-only. Server (requireTaxAccess_) is the real gate — this
+// client-side check is purely so a non-premium user sees a friendly
+// upgrade card instantly instead of a round-trip error.
+let acctTransactions=[];
+let acctLoadSeq=0; // guards against a slow older request overwriting a newer one's result
+
+function currentMonthValue_(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+
+function hasAcctAccess_(){
+  return !!(currentUser && currentUser.package && currentUser.package.hasTax && !currentUser.package.expired);
+}
+
+function openAccountingTab(){
+  document.getElementById('docMain').style.display='none';
+  document.getElementById('acctMain').style.display='';
+  document.querySelectorAll('.doc-tab').forEach(function(b){b.classList.remove('active');b.style.background='#fff';});
+  const acctBtn=document.getElementById('acctTabBtn');
+  if(acctBtn){acctBtn.classList.add('active');acctBtn.style.background='var(--accent)';}
+
+  const ok=hasAcctAccess_();
+  document.getElementById('acctLocked').style.display=ok?'none':'';
+  document.getElementById('acctContent').style.display=ok?'':'none';
+  if(!ok) return;
+
+  if(!gv('acctMonth')) document.getElementById('acctMonth').value=currentMonthValue_();
+  loadAccounting();
+}
+
+function fmtBaht_(n){ return (n||0).toLocaleString('th-TH',{minimumFractionDigits:2}); }
+
+function loadAccounting(){
+  const seq=++acctLoadSeq;
+  const month=gv('acctMonth')||currentMonthValue_();
+  document.getElementById('acctList').innerHTML='<div style="padding:16px;font-size:13px;color:var(--muted);text-align:center">กำลังโหลด...</div>';
+  callServer('getCashTransactions',{lineAuth:currentLineAuth,yearMonth:month})
+    .then(function(res){
+      if(seq!==acctLoadSeq) return; // a newer load already started — drop this stale response
+      if(!res.success){
+        document.getElementById('acctList').innerHTML='<div style="padding:16px;font-size:13px;color:#c0392b;text-align:center">'+escapeHtml(res.error||'โหลดข้อมูลไม่สำเร็จ')+'</div>';
+        acctTransactions=[];
+        renderAcctSummary();
+        return;
+      }
+      acctTransactions=res.transactions||[];
+      renderAcctList();
+      renderAcctSummary();
+    })
+    .catch(function(e){
+      if(seq!==acctLoadSeq) return;
+      document.getElementById('acctList').innerHTML='<div style="padding:16px;font-size:13px;color:#c0392b;text-align:center">เกิดข้อผิดพลาด: '+escapeHtml(e.message||e)+'</div>';
+    });
+}
+
+function renderAcctSummary(){
+  let income=0, expense=0;
+  acctTransactions.forEach(function(t){
+    income+=t.income||0;
+    expense+=(t.expenseGoods||0)+(t.expenseOther||0);
+  });
+  document.getElementById('acctIncome').textContent=fmtBaht_(income)+' บาท';
+  document.getElementById('acctExpense').textContent=fmtBaht_(expense)+' บาท';
+  document.getElementById('acctNet').textContent=fmtBaht_(income-expense)+' บาท';
+}
+
+function renderAcctList(){
+  const el=document.getElementById('acctList');
+  if(!acctTransactions.length){
+    el.innerHTML='<div style="padding:16px;font-size:13px;color:var(--muted);text-align:center">ยังไม่มีรายการในเดือนนี้</div>';
+    return;
+  }
+  el.innerHTML=acctTransactions.map(function(t){
+    const isIncome=(t.income||0)>0;
+    const amt=isIncome?(t.income||0):((t.expenseGoods||0)+(t.expenseOther||0));
+    const color=isIncome?'#1a8a4a':'#c0392b';
+    const sign=isIncome?'+':'−';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--border)">'
+      +'<div style="min-width:0">'
+        +'<div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(t.itemDescription)+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+escapeHtml(t.date)+(t.remarks?(' · '+escapeHtml(t.remarks)):'')+'</div>'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">'
+        +'<div style="font-weight:700;color:'+color+';white-space:nowrap">'+sign+fmtBaht_(amt)+' บาท</div>'
+        +'<button class="btn-rm" onclick="deleteAcctTransaction('+t.rowIndex+')" title="ลบรายการนี้">×</button>'
+      +'</div>'
+    +'</div>';
+  }).join('');
+}
+
+function addAcctTransaction(){
+  const kind=gv('acctKind');
+  const amount=parseFloat(gv('acctAmount'));
+  const date=gv('acctDate');
+  const desc=gv('acctDesc');
+  if(!date){showToast('⚠️ กรุณาเลือกวันที่');return;}
+  if(!desc){showToast('⚠️ กรุณากรอกรายการ');return;}
+  if(!amount || amount<=0){showToast('⚠️ กรุณากรอกจำนวนเงินให้ถูกต้อง');return;}
+
+  const tx={
+    date:date,
+    itemDescription:desc,
+    remarks:gv('acctRemarks'),
+    income:      kind==='income'?amount:0,
+    expenseGoods:kind==='goods' ?amount:0,
+    expenseOther:kind==='other' ?amount:0
+  };
+  const btn=document.getElementById('acctAddBtn');
+  btn.disabled=true;
+  callServer('saveCashTransaction',{transaction:tx,lineAuth:currentLineAuth})
+    .then(function(res){
+      btn.disabled=false;
+      if(res.success){
+        showToast('✅ บันทึกรายการแล้ว');
+        setV('acctDesc','');
+        setV('acctAmount','');
+        setV('acctRemarks','');
+        // If the entry was for a different month than what's currently
+        // shown, jump the view to that month so the user actually sees
+        // what they just saved instead of it silently vanishing.
+        const entryMonth=date.slice(0,7);
+        if(gv('acctMonth')!==entryMonth) document.getElementById('acctMonth').value=entryMonth;
+        loadAccounting();
+      } else {
+        showToast('❌ '+res.error);
+      }
+    })
+    .catch(function(e){
+      btn.disabled=false;
+      showToast('❌ '+(e.message||e));
+    });
+}
+
+function deleteAcctTransaction(rowIndex){
+  if(!confirm('ลบรายการนี้?')) return;
+  callServer('deleteCashTransaction',{rowIndex:rowIndex,lineAuth:currentLineAuth})
+    .then(function(res){
+      if(res.success){ showToast('✅ ลบแล้ว'); loadAccounting(); }
+      else showToast('❌ '+res.error);
+    })
+    .catch(function(e){ showToast('❌ '+(e.message||e)); });
+}
+
+function downloadAcctReport(){
+  const month=gv('acctMonth')||currentMonthValue_();
+  const parts=month.split('-');
+  const y=parseInt(parts[0],10), m=parseInt(parts[1],10);
+  const startDate=month+'-01';
+  const lastDay=new Date(y,m,0).getDate(); // day 0 of next month = last day of this month
+  const endDate=month+'-'+String(lastDay).padStart(2,'0');
+
+  showOverlay(true,'กำลังสร้างรายงาน','กรุณารอสักครู่');
+  callServer('generateCashReportPDF',{reportData:{startDate:startDate,endDate:endDate},lineAuth:currentLineAuth})
+    .then(function(res){
+      showOverlay(false);
+      if(res.success) window.open(res.pdfUrl,'_blank');
+      else showToast('❌ '+res.error);
+    })
+    .catch(function(e){
+      showOverlay(false);
+      showToast('❌ '+(e.message||e));
+    });
+}
+
 function newDoc(){
   document.getElementById('successCard').classList.remove('show');
   document.getElementById('formActions').style.display='';
@@ -1101,3 +1363,4 @@ document.addEventListener('input',function(e){
 </script>
 </body>
 </html>
+
