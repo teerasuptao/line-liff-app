@@ -268,11 +268,11 @@ function buildSubscribeReply_(text, lineUserId) {
 const PACKAGES = {
   free: {
     id: 'free', name: 'ทดลองใช้ฟรี', price: 0,
-    quotaPerMonth: 5, hasAI: false, hasTax: false
+    quotaPerMonth: 30, hasAI: false, hasTax: false
   },
   starter59: {
     id: 'starter59', name: 'แพ็คเริ่มต้น', price: 59,
-    quotaPerMonth: 30, hasAI: false, hasTax: false
+    quotaPerMonth: 100, hasAI: false, hasTax: false
   },
   pro149: {
     id: 'pro149', name: 'แพ็คโปร', price: 149,
@@ -1456,7 +1456,7 @@ function buildDocumentMenuMessage_() {
     return '📄 ' + k.label + '\nhttps://liff.line.me/' + LIFF_ID_FOR_BOT + '?type=' + k.type;
   });
   return 'หนูสามารถทำเอกสารได้ดังนี้ค่ะ 🌸\n\n' + lines.join('\n\n') +
-    '\n\n✨ ใช้ฟรีได้ 5 ครั้ง/เดือนเลยค่ะ ถ้าอยากสร้างได้ไม่จำกัดหรืออยากได้ระบบทำบัญชี/ยื่นภาษี พิมพ์ "แพ็กเกจ" ดูรายละเอียดได้เลยนะคะ 💕';
+    '\n\n✨ ใช้ฟรีได้ ' + PACKAGES.free.quotaPerMonth + ' ครั้ง/เดือนเลยค่ะ ถ้าอยากสร้างได้ไม่จำกัดหรืออยากได้ระบบทำบัญชี/ยื่นภาษี พิมพ์ "แพ็กเกจ" ดูรายละเอียดได้เลยนะคะ 💕';
 }
 
 // Entry point LINE calls (routed here from doPost when body.events exists)
@@ -1592,9 +1592,9 @@ function isTaxFeatureQuery_(text) {
 function buildPackageInfoMessage_() {
   return '📦 แพ็กเกจของ ง่าย ผู้ช่วยทำเอกสาร\n\n' +
     '🆓 ทดลองใช้ฟรี\n' +
-    '• สร้างเอกสารได้ 5 ครั้ง/เดือน ไม่มีค่าใช้จ่าย\n\n' +
+    '• สร้างเอกสารได้ ' + PACKAGES.free.quotaPerMonth + ' ครั้ง/เดือน ไม่มีค่าใช้จ่าย\n\n' +
     '1️⃣ แพ็คเริ่มต้น 59 บาท/เดือน\n' +
-    '• สร้างเอกสารได้ 30 ครั้ง/เดือน\n\n' +
+    '• สร้างเอกสารได้ ' + PACKAGES.starter59.quotaPerMonth + ' ครั้ง/เดือน\n\n' +
     '2️⃣ แพ็คโปร 149 บาท/เดือน\n' +
     '• สร้างเอกสารได้ไม่จำกัด\n\n' +
     '3️⃣ แพ็คพรีเมียม 249 บาท/เดือน\n' +
