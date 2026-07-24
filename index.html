@@ -332,7 +332,7 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
         <div class="success-icon">✅</div>
         <h3>สร้างเอกสารสำเร็จ!</h3>
         <p>บันทึกลง Google Drive และ Google Sheet เรียบร้อยแล้ว</p>
-        <a id="pdfBtn" href="#" target="_blank" class="pdf-btn">📄 เปิด PDF</a>
+        <a id="pdfBtn" href="#" onclick="openExternalUrl_(this.href);return false;" class="pdf-btn">📄 เปิด PDF</a>
         <br/><br/>
         <button class="btn btn-accent" onclick="shareToCustomer()">📤 ส่งให้ลูกค้าทาง LINE</button>
         <br/><br/>
@@ -543,6 +543,20 @@ body{font-family:'Inter','Sarabun',sans-serif;background:#F5F6F2;color:#1a1a1a;m
 </div><!-- /appScreen -->
 
 <script>
+// Google Drive blocks/sign-in-walls links opened inside LINE's built-in
+// in-app browser (this happens even for files shared as "anyone with the
+// link, view only" — it's a browser-detection thing on Google's side, not
+// an account requirement). Forcing the link open in the device's real
+// external browser (Safari/Chrome) via liff.openWindow(..., external:true)
+// makes the login wall disappear, since the file itself needs no login.
+function openExternalUrl_(url){
+  if(!url) return;
+  if(typeof liff!=='undefined' && liff.isInClient && liff.isInClient() && liff.openWindow){
+    try{ liff.openWindow({url:url, external:true}); return; }catch(e){}
+  }
+  window.open(url,'_blank');
+}
+
 // ── Config ────────────────────────────────────────────────────
 const LIFF_ID='2010618788-8xUdkoqR';
 // ⚠️⚠️⚠️ SETUP REQUIRED — ต้องแก้ก่อนใช้งานบนบัญชี ngailinebot ⚠️⚠️⚠️
@@ -848,7 +862,7 @@ function loadHistory(){
         return;
       }
       el.innerHTML=items.map(function(item){
-        return '<div class="history-item" onclick="window.open(\''+escapeAttr(item.url)+'\',\'_blank\')">'
+        return '<div class="history-item" onclick="openExternalUrl_(\''+escapeAttr(item.url)+'\')">'
           +'<div style="display:flex;justify-content:space-between;align-items:center">'
           +'<div class="history-no">'+escapeHtml(item.docNo)+'</div>'
           +'<div class="history-total">฿'+parseFloat(item.total||0).toLocaleString('th-TH')+'</div>'
@@ -1100,7 +1114,8 @@ function shareToCustomer(){
   const d = lastGeneratedDoc;
   const text = (d.docTypeName||'เอกสาร') + ' ' + (d.docNo||'') +
     (d.customerName ? ('\nสำหรับ: ' + d.customerName) : '') +
-    '\n\n' + d.url;
+    '\n\n' + d.url +
+    '\n\n(ถ้าเปิดแล้วขึ้นให้ล็อกอิน Google ให้กดจุดสามจุด/ไอคอนเบราว์เซอร์มุมขวาบน แล้วเลือก "เปิดด้วย Safari" หรือ "เปิดด้วย Chrome" แทนค่ะ)';
   liff.shareTargetPicker([{ type: 'text', text: text }])
     .then(function(res){
       if(res){ showToast('✅ ส่งเอกสารแล้ว'); }
@@ -1268,7 +1283,7 @@ function downloadAcctReport(){
   callServer('generateCashReportPDF',{reportData:{startDate:startDate,endDate:endDate},lineAuth:currentLineAuth})
     .then(function(res){
       showOverlay(false);
-      if(res.success) window.open(res.pdfUrl,'_blank');
+      if(res.success) openExternalUrl_(res.pdfUrl);
       else showToast('❌ '+res.error);
     })
     .catch(function(e){
