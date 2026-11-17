@@ -1,0 +1,1 @@
+document.addEventListener('click',event=>{const a=event.target.closest('a[data-cta]');if(!a)return;window.dispatchEvent(new CustomEvent('ngai_cta_click',{detail:{placement:a.dataset.cta,path:location.pathname}}));if(Array.isArray(window.dataLayer))window.dataLayer.push({event:'ngai_cta_click',placement:a.dataset.cta,page_path:location.pathname})});
